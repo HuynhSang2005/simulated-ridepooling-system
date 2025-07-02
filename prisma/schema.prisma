@@ -1,0 +1,71 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === ENUMS ===
+enum BookingStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// === MODELS ===
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  bookings  Booking[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Driver {
+  id        String   @id @default(cuid())
+  name      String
+  // Thêm các thông tin khác như biển số xe, etc.
+  routes    Route[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  user           User          @relation(fields: [userId], references: [id])
+  userId         String
+  pickupAddress  String
+  pickupLocation Json       // Lưu { lat: number, lng: number }
+  status         BookingStatus @default(PENDING)
+  stop           Stop?      // Một booking sẽ thuộc về một điểm dừng trong lộ trình
+  createdAt      DateTime      @default(now())
+}
+
+model Route {
+  id            String   @id @default(cuid())
+  driver        Driver   @relation(fields: [driverId], references: [id])
+  driverId      String
+  stops         Stop[]
+  totalDistance Float       // tính bằng mét
+  totalDuration Float       // tính bằng giây
+  createdAt     DateTime @default(now())
+}
+
+model Stop {
+  id        String   @id @default(cuid())
+  route     Route    @relation(fields: [routeId], references: [id])
+  routeId   String
+  booking   Booking? @relation(fields: [bookingId], references: [id])
+  bookingId String?  @unique // Điểm dừng có thể không phải là điểm đón khách (vd: depot)
+  type      String           // "PICKUP" hoặc "DEPOT" hoặc "ENDPOINT"
+  location  Json             // { lat, lng }
+  sequence  Int              // Thứ tự của điểm dừng trong lộ trình (1, 2, 3...)
+  eta       DateTime         // Thời gian dự kiến đến điểm này
+}

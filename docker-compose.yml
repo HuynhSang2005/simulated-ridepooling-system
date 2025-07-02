@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ride_pooling_db # Name of the container
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user_dev          # Username
+      POSTGRES_PASSWORD: password_dev  # Password
+      POSTGRES_DB: ride_pooling        # Database name
+    ports:
+      - "5003:5432" # Expose PostgreSQL on port 5003
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist data in a named volume
+
+volumes:
+  postgres_data:
