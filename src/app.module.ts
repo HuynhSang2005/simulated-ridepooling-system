@@ -5,6 +5,7 @@ import { OsrmModule } from 'core/orsm/osrm.module';
 import { RouteOptimizationModule } from './modules/route-optimization/route-optimization.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BookingsModule } from './modules/bookings/bookings.module';
+import { EventsGateway } from './events/events.gateway';
 
 @Module({
   imports: [
@@ -15,6 +16,6 @@ import { BookingsModule } from './modules/bookings/bookings.module';
     RouteOptimizationModule,
   ],
   controllers: [AppController],
-  providers: [],
+  providers: [EventsGateway],
 })
 export class AppModule {}
