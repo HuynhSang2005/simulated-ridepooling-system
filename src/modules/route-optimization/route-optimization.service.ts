@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Booking, BookingStatus, Driver, Prisma } from '@prisma/client';
-import { OsrmService, Point } from 'core/orsm/orsm.service';
+import { OsrmService, Point } from 'core/osrm/orsm.service';
 import { PrismaService } from 'core/prisma/prisma.service';
 import { EventsGateway } from 'src/events/events.gateway';
 

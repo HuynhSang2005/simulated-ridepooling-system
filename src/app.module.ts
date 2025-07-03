@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { PrismaModule } from 'core/prisma/prisma.module';
-import { OsrmModule } from 'core/orsm/osrm.module';
+import { OsrmModule } from 'core/osrm/osrm.module';
 import { RouteOptimizationModule } from './modules/route-optimization/route-optimization.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BookingsModule } from './modules/bookings/bookings.module';
@@ -18,6 +18,6 @@ import { EventsModule } from './events/events.module';
     RouteOptimizationModule,
   ],
   controllers: [AppController],
-  providers: [EventsGateway],
+  providers: [],
 })
 export class AppModule {}

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Driver App Simulator</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Driver App Simulator</h1>
+    <label for="driverId">Enter Driver ID:</label>
+    <input type="text" id="driverId" value="clz..."/> <button onclick="connect()">Connect</button>
+    <hr>
+    <h2>Logs:</h2>
+    <pre id="logs"></pre>
+
+    <script>
+        const driverIdInput = document.getElementById('driverId');
+        const logs = document.getElementById('logs');
+        let socket;
+
+        function log(message) {
+            logs.innerHTML += `${new Date().toLocaleTimeString()}: ${message}\n`;
+        }
+
+        function connect() {
+            if (socket) {
+                socket.disconnect();
+            }
+
+            const driverId = driverIdInput.value;
+            if (!driverId) {
+                alert('Please enter a Driver ID');
+                return;
+            }
+
+            // Kết nối tới server NestJS, truyền driverId qua query
+            socket = io('http://localhost:3000', {
+                query: { driverId }
+            });
+
+            socket.on('connect', () => {
+                log(`Connected to server as driver: ${driverId}`);
+            });
+
+            socket.on('disconnect', () => {
+                log('Disconnected from server.');
+            });
+
+            // Lắng nghe sự kiện 'new_route'
+            socket.on('new_route', (data) => {
+                log('🎉 NEW ROUTE ASSIGNED! 🎉');
+                log(JSON.stringify(data, null, 2));
+            });
+        }
+    </script>
+</body>
+</html>
