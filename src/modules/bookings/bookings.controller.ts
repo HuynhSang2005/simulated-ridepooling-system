@@ -10,4 +10,8 @@ export class BookingsController {
   create(@Body() createBookingDto: CreateBookingDto) {
     return this.bookingsService.createBooking(createBookingDto);
   }
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.bookingsService.findBookingById(id);
+  }
 }
