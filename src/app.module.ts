@@ -5,10 +5,10 @@ import { OsrmModule } from 'core/osrm/osrm.module';
 import { RouteOptimizationModule } from './modules/route-optimization/route-optimization.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BookingsModule } from './modules/bookings/bookings.module';
-import { EventsGateway } from './events/events.gateway';
 import { EventsModule } from './events/events.module';
 import { UsersModule } from './modules/users/users.module';
 import { DriversModule } from './modules/drivers/drivers.module';
+import { StopModule } from './modules/stop/stop.module';
 
 @Module({
   imports: [
@@ -20,6 +20,7 @@ import { DriversModule } from './modules/drivers/drivers.module';
     BookingsModule,
     UsersModule,
     DriversModule,
+    StopModule,
   ],
   controllers: [AppController],
   providers: [],
