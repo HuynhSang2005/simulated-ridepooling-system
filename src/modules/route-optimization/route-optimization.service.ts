@@ -1,12 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Booking, BookingStatus, Driver } from '@prisma/client';
+import { Booking, BookingStatus, Driver, Prisma } from '@prisma/client';
 import { OsrmService, Point } from 'core/orsm/orsm.service';
 import { PrismaService } from 'core/prisma/prisma.service';
+
+// Helper function (type guard) để xác thực cấu trúc của một Point.
+function isValidPoint(data: unknown): data is Point {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'lat' in data &&
+    'lng' in data &&
+    typeof (data as Point).lat === 'number' &&
+    typeof (data as Point).lng === 'number'
+  );
+}
 
 @Injectable()
 export class RouteOptimizationService {
   private readonly logger = new Logger(RouteOptimizationService.name);
+
+  private readonly DEPOT_LOCATION: Point = { lat: 10.779722, lng: 106.699444 };
 
   constructor(
     private readonly prisma: PrismaService,
@@ -17,75 +31,84 @@ export class RouteOptimizationService {
   async handleCron() {
     this.logger.debug('Running route optimization job...');
 
-
-    // 1. Lấy tất cả các booking đang chờ
+    // 1. Lấy các booking đang chờ và lọc ra những booking có vị trí hợp lệ
     const pendingBookings = await this.prisma.booking.findMany({
       where: { status: BookingStatus.PENDING },
     });
 
-    // 2. Nếu không có đủ booking, bỏ qua lần chạy này
-    if (pendingBookings.length < 2) {
-      this.logger.debug('Not enough pending bookings. Skipping.');
+    const validBookings = pendingBookings.filter((booking) => {
+      const isValid = isValidPoint(booking.pickupLocation);
+      if (!isValid) {
+        this.logger.warn(
+          `Booking ID ${booking.id} has invalid pickupLocation. Skipping.`,
+        );
+      }
+      return isValid;
+    });
+
+    // 2. Kiểm tra xem có đủ booking hợp lệ để tạo lộ trình không
+    if (validBookings.length === 0) {
+      this.logger.debug('No valid pending bookings found. Skipping.');
+      return;
+    }
+    this.logger.log(`Found ${validBookings.length} valid pending bookings.`);
+
+    // 3. Tìm một tài xế có sẵn
+    const driver = await this.prisma.driver.findFirst(); // Logic tìm tài xế có thể phức tạp hơn
+    if (!driver) {
+      this.logger.warn('No available drivers found. Cannot create route.');
       return;
     }
 
-    this.logger.log(`Found ${pendingBookings.length} pending bookings.`);
+    // 4. Chuẩn bị dữ liệu cho việc tính toán
+    // Mảng `locations` sẽ có cấu trúc: [depot, booking1_location, booking2_location, ...]
+    const locations: Point[] = [this.DEPOT_LOCATION];
+    const locationIndexMap = new Map<string, number>(); // Map từ bookingId -> index trong `locations`
 
-    // 3. Định nghĩa điểm xuất phát (Depot)
-    // Ví dụ: Lấy Bưu điện Trung tâm Sài Gòn làm điểm xuất phát
-    const depot: Point = { lat: 10.779722, lng: 106.699444 };
+    validBookings.forEach((booking, index) => {
+      locations.push(booking.pickupLocation as unknown as Point);
+      // Index trong `locations` sẽ là `index + 1` (vì index 0 là depot)
+      locationIndexMap.set(booking.id, index + 1);
+    });
 
-    // 4. Chuẩn bị danh sách các điểm cần tính toán
-    // Điểm đầu tiên (index 0) luôn là depot
-    const locations: Point[] = [
-      depot,
-      ...pendingBookings.map(
-        (booking) => booking.pickupLocation as unknown as Point,
-      ),
-    ];
-
-    // 5. Gọi OSRM để lấy ma trận thời gian
+    // 5. Lấy ma trận thời gian từ OSRM
     const durationMatrix = await this.osrmService.getDurationMatrix(locations);
 
-    this.logger.debug('Duration Matrix received from OSRM:');
-    console.log(durationMatrix); // Log ma trận để kiểm tra
-
-    // 6. Chạy thuật toán tối ưu để tìm lộ trình
-    const optimizedRoute = this.solveWithGreedy(
-      pendingBookings,
+    // 6. Chạy thuật toán tối ưu để tìm thứ tự đón khách tốt nhất
+    const optimizedBookings = this.solveWithGreedy(
+      validBookings,
       durationMatrix,
     );
-    this.logger.log(`Optimized route: ${optimizedRoute.map((b) => b.id)}`);
-
-    this.logger.log('Optimized route calculated:');
-    // Log ra ID của các booking theo thứ tự đã tối ưu
-    console.log(optimizedRoute.map((booking) => booking.id));
 
     try {
-      await this.saveRoute(optimizedRoute, durationMatrix);
+      // 7. Lưu lộ trình đã tối ưu vào database
+      await this.saveOptimizedRoute(
+        optimizedBookings,
+        durationMatrix,
+        locationIndexMap,
+        driver,
+      );
       this.logger.log('Successfully saved new route to the database.');
     } catch (error) {
       this.logger.error('Failed to save route', error.stack);
     }
-
   }
 
-  private async saveRoute(
-    bookings: Booking[],
+  /**
+   * Lưu lộ trình đã được tối ưu vào database trong một transaction duy nhất.
+   * @param optimizedBookings - Mảng các booking theo thứ tự đón tối ưu.
+   * @param durationMatrix - Ma trận thời gian từ OSRM.
+   * @param locationIndexMap - Map từ bookingId đến index của nó trong ma trận.
+   * @param driver - Tài xế được gán cho lộ trình này.
+   */
+  private async saveOptimizedRoute(
+    optimizedBookings: Booking[],
     durationMatrix: number[][],
+    locationIndexMap: Map<string, number>,
+    driver: Driver,
   ) {
-    // Giả định chúng ta có một tài xế để gán tuyến
-    // Trong thực tế, bạn sẽ có logic để tìm tài xế đang rảnh
-    // TODO: Thay thế bằng logic tìm tài xế thực tế
-    const driver = await this.prisma.driver.findFirst();
-    if (!driver) {
-      this.logger.warn('No available drivers found. Cannot assign route.');
-      return;
-    }
-
-    // Sử dụng transaction để đảm bảo tất cả các thao tác đều thành công
     await this.prisma.$transaction(async (tx) => {
-      // a. Tạo bản ghi Route mới
+      // Tạo record Route mới để lấy ID
       const newRoute = await tx.route.create({
         data: {
           driverId: driver.id,
@@ -94,10 +117,73 @@ export class RouteOptimizationService {
         },
       });
 
-      // Logic tạo Stop và cập nhật Booking sẽ được thêm vào đây...
+      // Tạo các điểm dừng (Stops) cho lộ trình
+      const stopsToCreate: Prisma.StopCreateManyInput[] = [];
+      let cumulativeDuration = 0;
+      let lastLocationIndex = 0; // Index của điểm dừng trước đó, bắt đầu từ Depot (index 0)
+
+      // Thêm điểm dừng đầu tiên: Depot
+      stopsToCreate.push({
+        routeId: newRoute.id,
+        type: 'DEPOT',
+        location: this.DEPOT_LOCATION as unknown as Prisma.JsonObject,
+        sequence: 1,
+        eta: new Date(), // ETA tại depot là thời gian hiện tại
+      });
+
+      // Thêm các điểm dừng đón khách (PICKUP) theo thứ tự đã tối ưu
+      for (const [index, booking] of optimizedBookings.entries()) {
+        // Lấy index của booking trong ma trận gốc để tra cứu thời gian di chuyển
+        const currentLocationIndex = locationIndexMap.get(booking.id)!;
+
+        // Thời gian di chuyển từ điểm trước đó đến điểm hiện tại
+        const travelDuration =
+          durationMatrix[lastLocationIndex][currentLocationIndex];
+        cumulativeDuration += travelDuration;
+
+        stopsToCreate.push({
+          routeId: newRoute.id,
+          bookingId: booking.id,
+          type: 'PICKUP',
+          location: booking.pickupLocation as unknown as Prisma.JsonObject,
+          sequence: index + 2, // Sequence: Depot (1), Pickup 1 (2), Pickup 2 (3), ...
+          // ETA = thời gian hiện tại + tổng thời gian di chuyển tích lũy (tính bằng giây)
+          eta: new Date(Date.now() + cumulativeDuration * 1000),
+        });
+
+        // Cập nhật index của điểm dừng trước đó cho vòng lặp tiếp theo
+        lastLocationIndex = currentLocationIndex;
+      }
+
+      await tx.stop.createMany({
+        data: stopsToCreate,
+      });
+
+      // Cập nhật trạng thái các booking đã được gán vào lộ trình
+      const bookingIds = optimizedBookings.map((b) => b.id);
+      await tx.booking.updateMany({
+        where: { id: { in: bookingIds } },
+        data: { status: BookingStatus.ASSIGNED },
+      });
+
+      // Cập nhật lại tổng thời gian cho Route
+      // totalDuration là tổng thời gian từ depot đến điểm đón khách cuối cùng.
+      await tx.route.update({
+        where: { id: newRoute.id },
+        data: {
+          totalDuration: cumulativeDuration,
+          // totalDistance có thể được cập nhật tương tự nếu OSRM trả về ma trận khoảng cách
+        },
+      });
     });
   }
 
+  /**
+   * Giải quyết bài toán bằng thuật toán tham lam (Greedy - Nearest Neighbor).
+   * @param bookings - Danh sách các booking cần sắp xếp.
+   * @param durationMatrix - Ma trận thời gian di chuyển.
+   * @returns Mảng các booking đã được sắp xếp theo thứ tự tối ưu.
+   */
   private solveWithGreedy(
     bookings: Booking[],
     durationMatrix: number[][],
@@ -106,21 +192,22 @@ export class RouteOptimizationService {
       return [];
     }
 
-    const numLocations = bookings.length + 1; // +1 cho depot
+    const numLocations = durationMatrix.length;
     const visited = new Array(numLocations).fill(false);
-    const route: Booking[] = [];
+    const optimizedRoute: Booking[] = [];
 
-    // Bắt đầu từ depot (index 0)
+    // Luôn bắt đầu từ Depot (có index là 0 trong ma trận)
     let currentLocationIndex = 0;
     visited[currentLocationIndex] = true;
 
+    // Lặp lại để tìm đủ N điểm đến cho N booking
     for (let i = 0; i < bookings.length; i++) {
       let nearestNeighborIndex = -1;
       let minDuration = Infinity;
 
-      // Tìm điểm chưa thăm gần nhất từ vị trí hiện tại
+      // Tìm điểm đến (chưa được thăm) gần nhất từ vị trí hiện tại
       for (let j = 1; j < numLocations; j++) {
-        // Bắt đầu từ 1 vì 0 là depot
+        // Bỏ qua depot (j=0) và các điểm đã thăm
         if (
           !visited[j] &&
           durationMatrix[currentLocationIndex][j] < minDuration
@@ -130,13 +217,13 @@ export class RouteOptimizationService {
         }
       }
 
-      // Cập nhật vị trí và thêm booking vào lộ trình
+      // Thêm booking tương ứng với điểm gần nhất vào lộ trình
       visited[nearestNeighborIndex] = true;
-      // Index của booking trong mảng `bookings` là `nearestNeighborIndex - 1`
-      route.push(bookings[nearestNeighborIndex - 1]);
+      // Index trong mảng `bookings` là `nearestNeighborIndex - 1` vì ma trận có thêm depot ở đầu
+      optimizedRoute.push(bookings[nearestNeighborIndex - 1]);
       currentLocationIndex = nearestNeighborIndex;
     }
 
-    return route;
+    return optimizedRoute;
   }
 }
