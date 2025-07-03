@@ -7,15 +7,19 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { EventsGateway } from './events/events.gateway';
 import { EventsModule } from './events/events.module';
+import { UsersModule } from './modules/users/users.module';
+import { DriversModule } from './modules/drivers/drivers.module';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     PrismaModule,
     OsrmModule,
-    BookingsModule,
     EventsModule,
     RouteOptimizationModule,
+    BookingsModule,
+    UsersModule,
+    DriversModule,
   ],
   controllers: [AppController],
   providers: [],

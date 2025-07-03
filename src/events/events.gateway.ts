@@ -25,7 +25,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
     this.driverStatusService.addDriver(driverId, client.id);
-    this.logger.log(`Driver connected: ${driverId} with socket ID: ${client.id}`);
+    this.logger.log(
+      `Driver connected: ${driverId} with socket ID: ${client.id}`,
+    );
   }
 
   // Xử lý khi client ngắt kết nối
