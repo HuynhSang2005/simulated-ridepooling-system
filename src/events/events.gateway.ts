@@ -1,6 +1,7 @@
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
@@ -45,6 +46,19 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (socketId) {
       this.server.to(socketId).emit('new_route', routeData);
       this.logger.log(`Sent new route to driver ${driverId}`);
+    }
+  }
+  
+  @SubscribeMessage('update_location')
+  handleUpdateLocation(client: Socket, payload: { lat: number; lng: number }): void {
+    const driverId = this.driverStatusService.getDriverId(client.id);
+    if (driverId) {
+      this.logger.log(
+        `Received location update from driver ${driverId}:`,
+        payload,
+      );
+      // Logic tiếp theo: Gửi vị trí này đến các khách hàng liên quan
+      // Sẽ được implement trong các task sau.
     }
   }
 }
