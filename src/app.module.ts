@@ -2,10 +2,18 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { PrismaModule } from 'core/prisma/prisma.module';
 import { OsrmModule } from 'core/orsm/osrm.module';
-import { BookingsController } from './modules/bookings/bookings.controller';
+import { RouteOptimizationModule } from './modules/route-optimization/route-optimization.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { BookingsModule } from './modules/bookings/bookings.module';
 
 @Module({
-  imports: [PrismaModule, OsrmModule, BookingsController, RouteOptimizationModule],
+  imports: [
+    ScheduleModule.forRoot(),
+    PrismaModule,
+    OsrmModule,
+    BookingsModule,
+    RouteOptimizationModule,
+  ],
   controllers: [AppController],
   providers: [],
 })
