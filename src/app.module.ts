@@ -6,6 +6,7 @@ import { RouteOptimizationModule } from './modules/route-optimization/route-opti
 import { ScheduleModule } from '@nestjs/schedule';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { EventsGateway } from './events/events.gateway';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { EventsGateway } from './events/events.gateway';
     PrismaModule,
     OsrmModule,
     BookingsModule,
+    EventsModule,
     RouteOptimizationModule,
   ],
   controllers: [AppController],
