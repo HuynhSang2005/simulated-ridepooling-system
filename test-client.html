@@ -41,6 +41,10 @@
                 log(`Connected to server as driver: ${driverId}`);
             });
 
+            socket.on('connect_error', (err) => {
+                log(`Connection Error: ${err.message}`);
+            });
+
             socket.on('disconnect', () => {
                 log('Disconnected from server.');
             });
