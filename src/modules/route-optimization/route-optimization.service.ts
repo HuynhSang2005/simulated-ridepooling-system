@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Booking ,BookingStatus } from '@prisma/client';
+import { Booking, BookingStatus, Driver } from '@prisma/client';
 import { OsrmService, Point } from 'core/orsm/orsm.service';
 import { PrismaService } from 'core/prisma/prisma.service';
 
@@ -10,13 +10,14 @@ export class RouteOptimizationService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly osrmService: OsrmService, 
+    private readonly osrmService: OsrmService,
   ) {}
 
   @Cron(CronExpression.EVERY_30_SECONDS)
   async handleCron() {
     this.logger.debug('Running route optimization job...');
-    
+
+
     // 1. Lấy tất cả các booking đang chờ
     const pendingBookings = await this.prisma.booking.findMany({
       where: { status: BookingStatus.PENDING },
@@ -34,12 +35,13 @@ export class RouteOptimizationService {
     // Ví dụ: Lấy Bưu điện Trung tâm Sài Gòn làm điểm xuất phát
     const depot: Point = { lat: 10.779722, lng: 106.699444 };
 
-
     // 4. Chuẩn bị danh sách các điểm cần tính toán
     // Điểm đầu tiên (index 0) luôn là depot
     const locations: Point[] = [
       depot,
-      ...pendingBookings.map((booking) => booking.pickupLocation as unknown as Point),
+      ...pendingBookings.map(
+        (booking) => booking.pickupLocation as unknown as Point,
+      ),
     ];
 
     // 5. Gọi OSRM để lấy ma trận thời gian
@@ -48,20 +50,54 @@ export class RouteOptimizationService {
     this.logger.debug('Duration Matrix received from OSRM:');
     console.log(durationMatrix); // Log ma trận để kiểm tra
 
-// 6. Chạy thuật toán tối ưu để tìm lộ trình
+    // 6. Chạy thuật toán tối ưu để tìm lộ trình
     const optimizedRoute = this.solveWithGreedy(
       pendingBookings,
       durationMatrix,
     );
+    this.logger.log(`Optimized route: ${optimizedRoute.map((b) => b.id)}`);
 
     this.logger.log('Optimized route calculated:');
     // Log ra ID của các booking theo thứ tự đã tối ưu
     console.log(optimizedRoute.map((booking) => booking.id));
 
-    // Logic tiếp theo: Lưu lộ trình này vào DB
+    try {
+      await this.saveRoute(optimizedRoute, durationMatrix);
+      this.logger.log('Successfully saved new route to the database.');
+    } catch (error) {
+      this.logger.error('Failed to save route', error.stack);
+    }
+
   }
 
-  // --- THÊM PHƯƠNG THỨC MỚI ---
+  private async saveRoute(
+    bookings: Booking[],
+    durationMatrix: number[][],
+  ) {
+    // Giả định chúng ta có một tài xế để gán tuyến
+    // Trong thực tế, bạn sẽ có logic để tìm tài xế đang rảnh
+    // TODO: Thay thế bằng logic tìm tài xế thực tế
+    const driver = await this.prisma.driver.findFirst();
+    if (!driver) {
+      this.logger.warn('No available drivers found. Cannot assign route.');
+      return;
+    }
+
+    // Sử dụng transaction để đảm bảo tất cả các thao tác đều thành công
+    await this.prisma.$transaction(async (tx) => {
+      // a. Tạo bản ghi Route mới
+      const newRoute = await tx.route.create({
+        data: {
+          driverId: driver.id,
+          totalDistance: 0, // Sẽ cập nhật sau
+          totalDuration: 0, // Sẽ cập nhật sau
+        },
+      });
+
+      // Logic tạo Stop và cập nhật Booking sẽ được thêm vào đây...
+    });
+  }
+
   private solveWithGreedy(
     bookings: Booking[],
     durationMatrix: number[][],
@@ -83,8 +119,12 @@ export class RouteOptimizationService {
       let minDuration = Infinity;
 
       // Tìm điểm chưa thăm gần nhất từ vị trí hiện tại
-      for (let j = 1; j < numLocations; j++) { // Bắt đầu từ 1 vì 0 là depot
-        if (!visited[j] && durationMatrix[currentLocationIndex][j] < minDuration) {
+      for (let j = 1; j < numLocations; j++) {
+        // Bắt đầu từ 1 vì 0 là depot
+        if (
+          !visited[j] &&
+          durationMatrix[currentLocationIndex][j] < minDuration
+        ) {
           minDuration = durationMatrix[currentLocationIndex][j];
           nearestNeighborIndex = j;
         }
@@ -98,7 +138,5 @@ export class RouteOptimizationService {
     }
 
     return route;
-
-
   }
 }
