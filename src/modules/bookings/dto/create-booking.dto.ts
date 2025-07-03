@@ -2,15 +2,18 @@ import { Type } from 'class-transformer';
 import {
   IsJSON,
   IsNotEmpty,
+  IsNumber,
   IsString,
   ValidateNested,
 } from 'class-validator';
 
 class LocationDto {
   @IsNotEmpty()
+  @IsNumber()
   lat: number;
 
   @IsNotEmpty()
+  @IsNumber()
   lng: number;
 }
 
