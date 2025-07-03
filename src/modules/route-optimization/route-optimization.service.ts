@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Booking, BookingStatus, Driver, Prisma } from '@prisma/client';
 import { OsrmService, Point } from 'core/orsm/orsm.service';
 import { PrismaService } from 'core/prisma/prisma.service';
+import { EventsGateway } from 'src/events/events.gateway';
 
 // Helper function (type guard) để xác thực cấu trúc của một Point.
 function isValidPoint(data: unknown): data is Point {
@@ -25,6 +26,7 @@ export class RouteOptimizationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly osrmService: OsrmService,
+    private readonly eventsGateway: EventsGateway, 
   ) {}
 
   @Cron(CronExpression.EVERY_30_SECONDS)
@@ -82,7 +84,7 @@ export class RouteOptimizationService {
 
     try {
       // 7. Lưu lộ trình đã tối ưu vào database
-      await this.saveOptimizedRoute(
+      await this.saveRouteAndNotifyDriver(
         optimizedBookings,
         durationMatrix,
         locationIndexMap,
@@ -101,19 +103,21 @@ export class RouteOptimizationService {
    * @param locationIndexMap - Map từ bookingId đến index của nó trong ma trận.
    * @param driver - Tài xế được gán cho lộ trình này.
    */
-  private async saveOptimizedRoute(
+  private async saveRouteAndNotifyDriver(
     optimizedBookings: Booking[],
     durationMatrix: number[][],
     locationIndexMap: Map<string, number>,
     driver: Driver,
   ) {
-    await this.prisma.$transaction(async (tx) => {
+    // Sử dụng transaction để đảm bảo tất cả các thao tác đều thành công hoặc không có gì cả.
+    // Transaction này sẽ trả về thông tin lộ trình đầy đủ nếu thành công.
+    const newRoute = await this.prisma.$transaction(async (tx) => {
       // Tạo record Route mới để lấy ID
-      const newRoute = await tx.route.create({
+      const createdRoute = await tx.route.create({
         data: {
           driverId: driver.id,
-          totalDistance: 0, // Sẽ cập nhật sau
-          totalDuration: 0, // Sẽ cập nhật sau
+          totalDistance: 0, 
+          totalDuration: 0, 
         },
       });
 
@@ -124,7 +128,7 @@ export class RouteOptimizationService {
 
       // Thêm điểm dừng đầu tiên: Depot
       stopsToCreate.push({
-        routeId: newRoute.id,
+        routeId: createdRoute.id,
         type: 'DEPOT',
         location: this.DEPOT_LOCATION as unknown as Prisma.JsonObject,
         sequence: 1,
@@ -142,7 +146,7 @@ export class RouteOptimizationService {
         cumulativeDuration += travelDuration;
 
         stopsToCreate.push({
-          routeId: newRoute.id,
+          routeId: createdRoute.id,
           bookingId: booking.id,
           type: 'PICKUP',
           location: booking.pickupLocation as unknown as Prisma.JsonObject,
@@ -166,16 +170,34 @@ export class RouteOptimizationService {
         data: { status: BookingStatus.ASSIGNED },
       });
 
-      // Cập nhật lại tổng thời gian cho Route
+      //
       // totalDuration là tổng thời gian từ depot đến điểm đón khách cuối cùng.
       await tx.route.update({
-        where: { id: newRoute.id },
+        where: { id: createdRoute.id },
         data: {
           totalDuration: cumulativeDuration,
           // totalDistance có thể được cập nhật tương tự nếu OSRM trả về ma trận khoảng cách
         },
       });
+
+      // Lấy lại thông tin route đầy đủ để trả về từ transaction
+      // Việc này đảm bảo dữ liệu gửi đi là mới nhất và bao gồm cả các stops.
+      return tx.route.findUnique({
+        where: { id: createdRoute.id },
+        include: {
+          stops: {
+            orderBy: {
+              sequence: 'asc',
+            },
+          },
+        },
+      });
     });
+
+    // Sau khi transaction thành công, gửi thông báo real-time cho tài xế
+    if (newRoute) {
+      this.eventsGateway.sendNewRouteToDriver(driver.id, newRoute);
+    }
   }
 
   /**
