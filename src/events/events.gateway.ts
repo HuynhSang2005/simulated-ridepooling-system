@@ -6,11 +6,11 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { DriverStatusService } from './driver-status.service';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from 'core/prisma/prisma.service';
+import { ConnectionStatusService } from './connection-status.service';
 
-@WebSocketGateway({ cors: { origin: '*' } }) // Cho phép kết nối từ mọi nguồn
+@WebSocketGateway({ cors: { origin: '*' } })
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -18,35 +18,38 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(EventsGateway.name);
 
   constructor(
-    private readonly driverStatusService: DriverStatusService,
+    private readonly connectionStatus: ConnectionStatusService,
     private readonly prisma: PrismaService,
   ) {}
 
   // Xử lý khi có một client (tài xế) kết nối
   handleConnection(client: Socket) {
     const driverId = client.handshake.query.driverId as string;
-    if (!driverId) {
+    const userId = client.handshake.query.userId as string;
+
+    if (driverId) {
+      this.connectionStatus.addDriver(driverId, client.id);
+      this.logger.log(`Driver connected: ${driverId}`);
+    } else if (userId) {
+      this.connectionStatus.addUser(userId, client.id);
+      this.logger.log(`User connected: ${userId}`);
+    } else {
       client.disconnect();
-      return;
     }
-    this.driverStatusService.addDriver(driverId, client.id);
-    this.logger.log(
-      `Driver connected: ${driverId} with socket ID: ${client.id}`,
-    );
   }
 
   // Xử lý khi client ngắt kết nối
   handleDisconnect(client: Socket) {
-    const driverId = this.driverStatusService.getDriverId(client.id);
-    if (driverId) {
-      this.driverStatusService.removeDriver(driverId);
-      this.logger.log(`Driver disconnected: ${driverId}`);
-    }
+    const disconnectedDriver = this.connectionStatus.removeDriverBySocketId(client.id);
+    if (disconnectedDriver) this.logger.log(`Driver disconnected: ${disconnectedDriver}`);
+    
+    const disconnectedUser = this.connectionStatus.removeUserBySocketId(client.id);
+    if (disconnectedUser) this.logger.log(`User disconnected: ${disconnectedUser}`);
   }
 
   // Hàm này sẽ được gọi từ service khác để gửi dữ liệu
   sendNewRouteToDriver(driverId: string, routeData: any) {
-    const socketId = this.driverStatusService.getSocketId(driverId);
+    const socketId = this.connectionStatus.getSocketIdForDriver(driverId);
     if (socketId) {
       this.server.to(socketId).emit('new_route', routeData);
       this.logger.log(`Sent new route to driver ${driverId}`);
@@ -54,13 +57,14 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
   
   @SubscribeMessage('update_location')
-  async handleUpdateLocation(client: Socket, payload: { lat: number; lng: number }): Promise<void> {
-    const driverId = this.driverStatusService.getDriverId(client.id);
+  async handleUpdateLocation(client: Socket, payload: { lat: number; lng: number }) {
+    // Tìm driverId từ socketId
+    const driverId = [...this.connectionStatus['connectedDrivers'].entries()]
+      .find(([_, socketId]) => socketId === client.id)?.[0];
     if (!driverId) return;
 
     this.logger.log(`Received location update from driver ${driverId}:`, payload);
 
-    // --- LOGIC MỚI ---
     // 1. Tìm lộ trình đang hoạt động của tài xế (lộ trình mới nhất)
     const activeRoute = await this.prisma.route.findFirst({
       where: { driverId: driverId },
@@ -80,12 +84,17 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userIds = await this.getUserIdsFromRoute(activeRoute.id);
 
     if (userIds.length > 0) {
-      this.logger.log(`[Broadcast] Sending location of driver ${driverId} to users: ${userIds.join(', ')}`);
-      // Logic gửi WebSocket đến các user sẽ được thêm ở bước sau
+      const socketIds = this.connectionStatus.getSocketIdsForUsers(userIds);
+      if (socketIds.length > 0) {
+        this.logger.log(`Broadcasting location to sockets: ${socketIds.join(', ')}`);
+        this.server.to(socketIds).emit('driver_location_updated', {
+          driverId,
+          location: payload,
+        });
+      }
     }
   }
 
-  // --- THÊM HÀM HELPER ---
   private async getUserIdsFromRoute(routeId: string): Promise<string[]> {
     const bookings = await this.prisma.booking.findMany({
       where: {

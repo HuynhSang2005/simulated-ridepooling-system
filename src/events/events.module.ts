@@ -1,10 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 import { EventsGateway } from './events.gateway';
-import { DriverStatusService } from './driver-status.service';
+import { ConnectionStatusService } from './connection-status.service';
 
 @Global()
 @Module({
-  providers: [EventsGateway, DriverStatusService],
+  providers: [EventsGateway, ConnectionStatusService],
   exports: [EventsGateway], 
 })
 export class EventsModule {}
