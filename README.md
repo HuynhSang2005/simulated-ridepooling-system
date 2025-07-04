@@ -55,14 +55,14 @@ Một giao diện client đơn giản (`test-client.html`) được tạo ra đ�
 
 <div align="center">
   <img src="docs/imgs/admin-panel.jpeg" alt="Admin Panel Screenshot" width="600"/><br>
-  <b>Bảng điều khiển Quản trị:</b> Tạo tài xế, người dùng, và các booking. Theo dõi toàn bộ dữ liệu hệ thống theo thời gian thực.
+  <b>Admin panel:</b> Tạo tài xế, người dùng, và các booking. Theo dõi toàn bộ dữ liệu hệ thống theo thời gian thực.
   <br><br>
   <img src="docs/imgs/driver-panel.jpeg" alt="Driver Panel Screenshot" width="600"/><br>
-  <b>Bảng điều khiển Tài xế:</b> Tài xế nhận lộ trình tối ưu, xem các booking được gán và cập nhật vị trí trực tuyến.
+  <b>Driver panel:</b> Tài xế nhận lộ trình tối ưu, xem các booking được gán và cập nhật vị trí trực tuyến.
   <br><br>
   <img src="docs/imgs/cumstomer-panel.jpeg" alt="Customer Panel Screenshot" width="600"/><br>
-  <b>Bảng điều khiển Khách hàng:</b> Khách hàng theo dõi chuyến đi, xem vị trí tài xế và nhận dự đoán thời gian di chuyển theo thời
-  
+  <b>Customer panel:</b> Khách hàng theo dõi chuyến đi, xem vị trí tài xế và nhận dự đoán thời gian di chuyển theo thời
+</div>
 ---
 
 ## 🚀 Cài đặt và Cấu hình
