@@ -7,7 +7,64 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// === ENUMS ===
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  bookings  Booking[]
+}
+
+model Driver {
+  id        String       @id @default(cuid())
+  name      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  status    DriverStatus @default(IDLE)
+  routes    Route[]
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  userId          String
+  pickupAddress   String
+  pickupLocation  Json
+  dropoffAddress  String        
+  dropoffLocation Json          
+  pickupETA       DateTime?     
+  dropoffETA      DateTime?     
+  tripDuration    Int?          
+  status          BookingStatus @default(PENDING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt  
+  user            User          @relation(fields: [userId], references: [id])
+  stops           Stop[]        @relation("BookingToStop") // Sửa: stop -> stops (một booking có nhiều stop)
+}
+
+model Route {
+  id            String      @id @default(cuid())
+  driverId      String
+  totalDistance Float
+  totalDuration Float
+  createdAt     DateTime    @default(now())
+  status        RouteStatus @default(PENDING_ASSIGNMENT)
+  driver        Driver      @relation(fields: [driverId], references: [id])
+  stops         Stop[]
+}
+
+model Stop {
+  id          String    @id @default(cuid())
+  routeId     String
+  bookingId   String?   
+  type        String
+  location    Json
+  sequence    Int
+  eta         DateTime
+  completedAt DateTime?
+  booking     Booking?  @relation("BookingToStop", fields: [bookingId], references: [id])
+  route       Route     @relation(fields: [routeId], references: [id])
+}
 
 enum DriverStatus {
   IDLE
@@ -26,63 +83,4 @@ enum BookingStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
-}
-
-// === MODELS ===
-
-model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  name      String?
-  bookings  Booking[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-}
-
-model Driver {
-  id        String       @id @default(cuid())
-  name      String
-  routes    Route[]
-  status    DriverStatus @default(IDLE) // Thêm dòng này
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-}
-
-model Booking {
-  id              String        @id @default(cuid())
-  user            User          @relation(fields: [userId], references: [id])
-  userId          String
-  pickupAddress   String
-  pickupLocation  Json
-  dropoffAddress  String
-  dropoffLocation Json
-  status          BookingStatus @default(PENDING)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  stop Stop? @relation("BookingToStop")
-}
-
-model Route {
-  id            String      @id @default(cuid())
-  driver        Driver      @relation(fields: [driverId], references: [id])
-  driverId      String
-  stops         Stop[]
-  status        RouteStatus @default(PENDING_ASSIGNMENT)
-  totalDistance Float // tính bằng mét
-  totalDuration Float // tính bằng giây
-  createdAt     DateTime    @default(now())
-}
-
-model Stop {
-  id          String    @id @default(cuid())
-  route       Route     @relation(fields: [routeId], references: [id])
-  routeId     String
-  booking     Booking?  @relation("BookingToStop", fields: [bookingId], references: [id])
-  bookingId   String?   @unique
-  type        String
-  location    Json
-  sequence    Int
-  completedAt DateTime?
-  eta         DateTime?
 }
