@@ -9,6 +9,18 @@ datasource db {
 }
 
 // === ENUMS ===
+
+enum DriverStatus {
+  IDLE      
+  ON_ROUTE  
+}
+
+enum RouteStatus {
+  PENDING_ASSIGNMENT 
+  IN_PROGRESS        
+  COMPLETED          
+}
+
 enum BookingStatus {
   PENDING
   ASSIGNED
@@ -31,8 +43,8 @@ model User {
 model Driver {
   id        String   @id @default(cuid())
   name      String
-  // Thêm các thông tin khác như biển số xe, etc.
   routes    Route[]
+  status    DriverStatus @default(IDLE) // Thêm dòng này
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -53,6 +65,7 @@ model Route {
   driver        Driver   @relation(fields: [driverId], references: [id])
   driverId      String
   stops         Stop[]
+  status        RouteStatus @default(PENDING_ASSIGNMENT) // Thêm dòng này
   totalDistance Float       // tính bằng mét
   totalDuration Float       // tính bằng giây
   createdAt     DateTime @default(now())
@@ -68,4 +81,5 @@ model Stop {
   location  Json             // { lat, lng }
   sequence  Int              // Thứ tự của điểm dừng trong lộ trình (1, 2, 3...)
   eta       DateTime         // Thời gian dự kiến đến điểm này
+  completedAt  DateTime?
 }
