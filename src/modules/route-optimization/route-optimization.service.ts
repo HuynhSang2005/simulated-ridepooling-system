@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Booking, BookingStatus, Driver, DriverStatus, Prisma } from '@prisma/client';
+import {
+  Booking,
+  BookingStatus,
+  Driver,
+  DriverStatus,
+  Prisma,
+} from '@prisma/client';
 import { OsrmService, Point } from 'core/osrm/orsm.service';
 import { PrismaService } from 'core/prisma/prisma.service';
 import { EventsGateway } from 'src/events/events.gateway';
@@ -26,7 +32,7 @@ export class RouteOptimizationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly osrmService: OsrmService,
-    private readonly eventsGateway: EventsGateway, 
+    private readonly eventsGateway: EventsGateway,
   ) {}
 
   @Cron(CronExpression.EVERY_30_SECONDS)
@@ -61,7 +67,9 @@ export class RouteOptimizationService {
     // Chuẩn bị danh sách các điểm, bao gồm cả điểm cuối
     const locations: Point[] = [
       depot,
-      ...validBookings.map((booking) => booking.pickupLocation as unknown as Point),
+      ...validBookings.map(
+        (booking) => booking.pickupLocation as unknown as Point,
+      ),
       endPoint,
     ];
 
@@ -76,12 +84,7 @@ export class RouteOptimizationService {
 
     try {
       // Truyền thêm endPoint và depot vào hàm saveRoute
-      await this.saveRoute(
-        optimizedBookings,
-        durationMatrix,
-        depot,
-        endPoint,
-      );
+      await this.saveRoute(optimizedBookings, durationMatrix, depot, endPoint);
       this.logger.log('Successfully saved new route with endpoint.');
     } catch (error) {
       this.logger.error('Failed to save route', error.stack);
@@ -105,7 +108,7 @@ export class RouteOptimizationService {
     const driver = await this.prisma.driver.findFirst({
       where: {
         status: DriverStatus.IDLE, // Chỉ lấy tài xế đang rảnh
-      }
+      },
     });
     if (!driver) {
       this.logger.warn('No available drivers found. Cannot create route.');
@@ -120,6 +123,12 @@ export class RouteOptimizationService {
           totalDistance: 0,
           totalDuration: 0,
         },
+      });
+
+      // Cập nhật trạng thái của tài xế thành ON_ROUTE
+      await tx.driver.update({
+        where: { id: driver.id },
+        data: { status: DriverStatus.ON_ROUTE },
       });
 
       // Tạo các điểm dừng (Stops) cho lộ trình
@@ -139,7 +148,8 @@ export class RouteOptimizationService {
       // Thêm các điểm dừng đón khách (PICKUP) theo thứ tự đã tối ưu
       for (const [index, booking] of optimizedBookings.entries()) {
         const currentLocationIndex = index + 1; // index 0 là depot, các booking bắt đầu từ 1
-        const travelDuration = durationMatrix[lastLocationIndex][currentLocationIndex];
+        const travelDuration =
+          durationMatrix[lastLocationIndex][currentLocationIndex];
         cumulativeDuration += travelDuration;
 
         stopsToCreate.push({
@@ -156,7 +166,8 @@ export class RouteOptimizationService {
 
       // --- LOGIC MỚI: Thêm điểm dừng cuối cùng là ENDPOINT ---
       const endPointLocationIndex = durationMatrix.length - 1;
-      cumulativeDuration += durationMatrix[lastLocationIndex][endPointLocationIndex];
+      cumulativeDuration +=
+        durationMatrix[lastLocationIndex][endPointLocationIndex];
       stopsToCreate.push({
         routeId: newRoute.id,
         bookingId: null,
