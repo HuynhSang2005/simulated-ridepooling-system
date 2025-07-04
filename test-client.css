@@ -1,0 +1,118 @@
+body {
+  background: linear-gradient(120deg, #f8fafc 0%, #e0e7ff 100%);
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  color: #22223b;
+}
+
+.container {
+  max-width: 480px;
+  margin: 40px auto;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 4px 32px rgba(60, 72, 88, 0.10);
+  padding: 32px 24px 24px 24px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+header h1 {
+  font-size: 2rem;
+  margin: 0 0 6px 0;
+  color: #3a5a98;
+  letter-spacing: 1px;
+}
+
+.subtitle {
+  color: #6c757d;
+  font-size: 1rem;
+  margin-bottom: 0;
+}
+
+.connect-section, .actions-section, .logs-section {
+  margin-bottom: 24px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+
+.input-group label {
+  font-size: 0.98rem;
+  margin-bottom: 4px;
+  color: #3a5a98;
+}
+
+.input-group input {
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 1rem;
+  outline: none;
+  transition: border 0.2s;
+}
+
+.input-group input:focus {
+  border-color: #3a5a98;
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+button {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px;
+  background: #3a5a98;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(60, 72, 88, 0.07);
+}
+
+button:disabled {
+  background: #bfc8e6;
+  cursor: not-allowed;
+}
+
+button:hover:not(:disabled) {
+  background: #22306e;
+}
+
+.logs-section {
+  background: #f4f6fb;
+  border-radius: 10px;
+  padding: 16px;
+  min-height: 120px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: 'Fira Mono', 'Consolas', monospace;
+  font-size: 0.98rem;
+  color: #22223b;
+  box-shadow: 0 1px 4px rgba(60, 72, 88, 0.04);
+}
+
+.logs-section h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  color: #3a5a98;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 16px 6px 12px 6px;
+  }
+  header h1 {
+    font-size: 1.2rem;
+  }
+}

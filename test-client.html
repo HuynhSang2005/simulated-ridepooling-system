@@ -1,60 +1,171 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Driver App Simulator</title>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Ride Pooling Test Client</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-</head>
-<body>
-    <h1>Driver App Simulator</h1>
-    <label for="driverId">Enter Driver ID:</label>
-    <input type="text" id="driverId" value="Nhập ID driver vào đây"/> <button onclick="connect()">Connect</button>
-    <hr>
-    <h2>Logs:</h2>
-    <pre id="logs"></pre>
-
+    <link rel="stylesheet" href="test-client.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🚗 Ride Pooling Simulator</h1>
+        <p class="subtitle">Test WebSocket features for drivers & users</p>
+      </header>
+      <section class="connect-section">
+        <div class="input-group">
+          <label for="driverId">Driver ID</label>
+          <input type="text" id="driverId" placeholder="Enter Driver ID" autocomplete="off" />
+        </div>
+        <div class="input-group">
+          <label for="userId">User ID</label>
+          <input type="text" id="userId" placeholder="Enter User ID" autocomplete="off" />
+        </div>
+        <div class="button-group">
+          <button id="connectDriverBtn">Connect as Driver</button>
+          <button id="connectUserBtn">Connect as User</button>
+          <button id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+      </section>
+      <section class="actions-section" id="driverActions" style="display:none;">
+        <h2>Driver Actions</h2>
+        <div class="input-group">
+          <label for="lat">Latitude</label>
+          <input type="number" id="lat" placeholder="e.g. 10.78" step="any" />
+        </div>
+        <div class="input-group">
+          <label for="lng">Longitude</label>
+          <input type="number" id="lng" placeholder="e.g. 106.69" step="any" />
+        </div>
+        <button id="sendLocationBtn">Send Location Update</button>
+      </section>
+      <section class="logs-section">
+        <h2>Logs</h2>
+        <pre id="logs"></pre>
+      </section>
+    </div>
     <script>
-        const driverIdInput = document.getElementById('driverId');
-        const logs = document.getElementById('logs');
-        let socket;
+      let driverSocket = null;
+      let userSocket = null;
 
-        function log(message) {
-            logs.innerHTML += `${new Date().toLocaleTimeString()}: ${message}\n`;
+      const driverIdInput = document.getElementById('driverId');
+      const userIdInput = document.getElementById('userId');
+      const connectDriverBtn = document.getElementById('connectDriverBtn');
+      const connectUserBtn = document.getElementById('connectUserBtn');
+      const disconnectBtn = document.getElementById('disconnectBtn');
+      const sendLocationBtn = document.getElementById('sendLocationBtn');
+      const latInput = document.getElementById('lat');
+      const lngInput = document.getElementById('lng');
+      const logs = document.getElementById('logs');
+      const driverActions = document.getElementById('driverActions');
+
+      function log(message, type = 'info') {
+        const time = new Date().toLocaleTimeString();
+        logs.innerHTML += `[${time}] ${message}\n`;
+        logs.scrollTop = logs.scrollHeight;
+      }
+
+      function setUI() {
+        connectDriverBtn.disabled = !!driverSocket;
+        connectUserBtn.disabled = !!userSocket;
+        disconnectBtn.disabled = !(driverSocket || userSocket);
+        driverIdInput.disabled = !!driverSocket;
+        userIdInput.disabled = !!userSocket;
+        driverActions.style.display = driverSocket ? '' : 'none';
+      }
+
+      connectDriverBtn.onclick = () => {
+        const driverId = driverIdInput.value.trim();
+        if (!driverId) {
+          alert('Please enter a Driver ID');
+          return;
         }
+        if (driverSocket) return;
+        driverSocket = io('http://localhost:3000', { query: { driverId } });
+        setUI();
 
-        function connect() {
-            if (socket) {
-                socket.disconnect();
-            }
+        driverSocket.on('connect', () => {
+          log(`✅ Connected as driver: ${driverId}`);
+          setUI();
+        });
+        driverSocket.on('disconnect', () => {
+          log('🔌 Driver disconnected.');
+          driverSocket = null;
+          setUI();
+        });
+        driverSocket.on('connect_error', (err) => {
+          log(`❌ Driver Connection Error: ${err.message}`);
+          driverSocket = null;
+          setUI();
+        });
+        driverSocket.on('new_route', (data) => {
+          log('🎉 NEW ROUTE ASSIGNED!');
+          log(JSON.stringify(data, null, 2));
+        });
+        driverSocket.on('driver_location_updated', (data) => {
+          log(`🛰️ Driver location updated: ${JSON.stringify(data)}`);
+        });
+      };
 
-            const driverId = driverIdInput.value;
-            if (!driverId) {
-                alert('Please enter a Driver ID');
-                return;
-            }
-
-            // Kết nối tới server NestJS, truyền driverId qua query
-            socket = io('http://localhost:3000', {
-                query: { driverId }
-            });
-
-            socket.on('connect', () => {
-                log(`Connected to server as driver: ${driverId}`);
-            });
-
-            socket.on('connect_error', (err) => {
-                log(`Connection Error: ${err.message}`);
-            });
-
-            socket.on('disconnect', () => {
-                log('Disconnected from server.');
-            });
-
-            // Lắng nghe sự kiện 'new_route'
-            socket.on('new_route', (data) => {
-                log('🎉 NEW ROUTE ASSIGNED! 🎉');
-                log(JSON.stringify(data, null, 2));
-            });
+      connectUserBtn.onclick = () => {
+        const userId = userIdInput.value.trim();
+        if (!userId) {
+          alert('Please enter a User ID');
+          return;
         }
+        if (userSocket) return;
+        userSocket = io('http://localhost:3000', { query: { userId } });
+        setUI();
+
+        userSocket.on('connect', () => {
+          log(`✅ Connected as user: ${userId}`);
+          setUI();
+        });
+        userSocket.on('disconnect', () => {
+          log('🔌 User disconnected.');
+          userSocket = null;
+          setUI();
+        });
+        userSocket.on('connect_error', (err) => {
+          log(`❌ User Connection Error: ${err.message}`);
+          userSocket = null;
+          setUI();
+        });
+        userSocket.on('new_route', (data) => {
+          log('🎉 NEW ROUTE ASSIGNED!');
+          log(JSON.stringify(data, null, 2));
+        });
+        userSocket.on('driver_location_updated', (data) => {
+          log(`🛰️ Driver location updated: ${JSON.stringify(data)}`);
+        });
+      };
+
+      disconnectBtn.onclick = () => {
+        if (driverSocket) {
+          driverSocket.disconnect();
+          driverSocket = null;
+        }
+        if (userSocket) {
+          userSocket.disconnect();
+          userSocket = null;
+        }
+        setUI();
+      };
+
+      sendLocationBtn.onclick = () => {
+        if (!driverSocket) return;
+        const lat = parseFloat(latInput.value);
+        const lng = parseFloat(lngInput.value);
+        if (isNaN(lat) || isNaN(lng)) {
+          alert('Please enter valid latitude and longitude');
+          return;
+        }
+        driverSocket.emit('update_location', { lat, lng });
+        log(`📍 Sent location: (${lat}, ${lng})`);
+      };
+
+      setUI();
     </script>
-</body>
+  </body>
 </html>
