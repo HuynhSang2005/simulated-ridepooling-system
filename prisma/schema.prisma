@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,14 +10,14 @@ datasource db {
 // === ENUMS ===
 
 enum DriverStatus {
-  IDLE      
-  ON_ROUTE  
+  IDLE
+  ON_ROUTE
 }
 
 enum RouteStatus {
-  PENDING_ASSIGNMENT 
-  IN_PROGRESS        
-  COMPLETED          
+  PENDING_ASSIGNMENT
+  IN_PROGRESS
+  COMPLETED
 }
 
 enum BookingStatus {
@@ -41,50 +40,49 @@ model User {
 }
 
 model Driver {
-  id        String   @id @default(cuid())
+  id        String       @id @default(cuid())
   name      String
   routes    Route[]
   status    DriverStatus @default(IDLE) // Thêm dòng này
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 }
 
 model Booking {
-  id             String        @id @default(cuid())
-  user           User          @relation(fields: [userId], references: [id])
-  userId         String
-  pickupAddress  String
-  pickupLocation Json       // Lưu { lat: number, lng: number }
+  id              String        @id @default(cuid())
+  user            User          @relation(fields: [userId], references: [id])
+  userId          String
+  pickupAddress   String
+  pickupLocation  Json
+  dropoffAddress  String
+  dropoffLocation Json
+  status          BookingStatus @default(PENDING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  dropoffAddress  String 
-  dropoffLocation Json   
-  
-  status         BookingStatus @default(PENDING)
-  stop           Stop?      // Một booking sẽ thuộc về một điểm dừng trong lộ trình
-  createdAt      DateTime      @default(now())
+  stop Stop? @relation("BookingToStop")
 }
 
 model Route {
-  id            String   @id @default(cuid())
-  driver        Driver   @relation(fields: [driverId], references: [id])
+  id            String      @id @default(cuid())
+  driver        Driver      @relation(fields: [driverId], references: [id])
   driverId      String
   stops         Stop[]
   status        RouteStatus @default(PENDING_ASSIGNMENT)
-  totalDistance Float       // tính bằng mét
-  totalDuration Float       // tính bằng giây
-  createdAt     DateTime @default(now())
+  totalDistance Float // tính bằng mét
+  totalDuration Float // tính bằng giây
+  createdAt     DateTime    @default(now())
 }
 
 model Stop {
-  id        String   @id @default(cuid())
-  route     Route    @relation(fields: [routeId], references: [id])
-  routeId   String
-  booking   Booking? @relation(fields: [bookingId], references: [id])
-  bookingId String?  @unique // Điểm dừng có thể không phải là điểm đón khách (vd: depot)
-  
-  type      String           // ""PICKUP" hoặc "DROPOFF"
-  
-  location  Json             // { lat, lng }
-  sequence  Int              // Thứ tự của điểm dừng trong lộ trình (1, 2, 3...)
-  completedAt  DateTime?
+  id          String    @id @default(cuid())
+  route       Route     @relation(fields: [routeId], references: [id])
+  routeId     String
+  booking     Booking?  @relation("BookingToStop", fields: [bookingId], references: [id])
+  bookingId   String?   @unique
+  type        String
+  location    Json
+  sequence    Int
+  completedAt DateTime?
+  eta         DateTime?
 }

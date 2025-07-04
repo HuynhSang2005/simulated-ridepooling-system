@@ -23,6 +23,12 @@ function isValidPoint(data: unknown): data is Point {
   );
 }
 
+interface StopPoint {
+  bookingId: string;
+  type: 'PICKUP' | 'DROPOFF';
+  location: Point;
+}
+
 @Injectable()
 export class RouteOptimizationService {
   private readonly logger = new Logger(RouteOptimizationService.name);
@@ -42,53 +48,134 @@ export class RouteOptimizationService {
     // 1. Lấy các booking đang chờ và lọc ra những booking có vị trí hợp lệ
     const pendingBookings = await this.prisma.booking.findMany({
       where: { status: BookingStatus.PENDING },
+      select: {
+        id: true,
+        userId: true,
+        pickupAddress: true,
+        pickupLocation: true,
+        dropoffLocation: true, 
+        status: true,
+        createdAt: true,
+      },
     });
 
     const validBookings = pendingBookings.filter((booking) => {
-      const isValid = isValidPoint(booking.pickupLocation);
-      if (!isValid) {
+      const isValidPickup = isValidPoint(booking.pickupLocation);
+      const isValidDropoff = isValidPoint(booking.dropoffLocation);
+      if (!isValidPickup || !isValidDropoff) {
         this.logger.warn(
-          `Booking ID ${booking.id} has invalid pickupLocation. Skipping.`,
+          `Booking ID ${booking.id} has invalid pickup/dropoff location. Skipping.`,
         );
       }
-      return isValid;
+      return isValidPickup && isValidDropoff;
     });
 
-    // 2. Kiểm tra xem có đủ booking hợp lệ để tạo lộ trình không
     if (validBookings.length === 0) {
       this.logger.debug('No valid pending bookings found. Skipping.');
       return;
     }
     this.logger.log(`Found ${validBookings.length} valid pending bookings.`);
 
-    const depot: Point = { lat: 10.779722, lng: 106.699444 };
-    const endPoint: Point = { lat: 10.8411, lng: 106.8099 }; // Ví dụ: KTX Khu B ĐHQG
+    const depot: Point = this.DEPOT_LOCATION;
 
-    // Chuẩn bị danh sách các điểm, bao gồm cả điểm cuối
-    const locations: Point[] = [
-      depot,
-      ...validBookings.map(
-        (booking) => booking.pickupLocation as unknown as Point,
-      ),
-      endPoint,
-    ];
+    // --- LOGIC MỚI: Tạo danh sách các điểm dừng (pickup & dropoff) ---
+    const pointsToVisit: StopPoint[] = [];
+    validBookings.forEach((booking) => {
+      pointsToVisit.push({
+        bookingId: booking.id,
+        type: 'PICKUP',
+        location: booking.pickupLocation as unknown as Point,
+      });
+      pointsToVisit.push({
+        bookingId: booking.id,
+        type: 'DROPOFF',
+        location: booking.dropoffLocation as unknown as Point,
+      });
+    });
 
-    // 5. Lấy ma trận thời gian từ OSRM
+    // 2. Chuẩn bị danh sách tọa độ để gọi OSRM
+    const locations: Point[] = [depot, ...pointsToVisit.map((p) => p.location)];
     const durationMatrix = await this.osrmService.getDurationMatrix(locations);
 
-    // 6. Chạy thuật toán tối ưu để tìm thứ tự đón khách tốt nhất
-    const optimizedBookings = this.solveWithGreedy(
-      validBookings,
-      durationMatrix,
+    // 3. Chạy thuật toán tối ưu mới
+    const optimizedStops = this.solveDarpWithGreedy(pointsToVisit, durationMatrix);
+
+    this.logger.log('Optimized stops calculated:');
+    optimizedStops.forEach((stop) => {
+      this.logger.log(`- ${stop.type} for booking ...${stop.bookingId.slice(-4)}`);
+    });
+
+    // TODO: Cập nhật logic saveRoute để lưu theo cấu trúc mới (pickup & dropoff)
+  }
+
+  /**
+   * Thuật toán tham lam cho DARP (Pickup & Dropoff).
+   * @param pointsToVisit - Danh sách các điểm dừng (pickup & dropoff).
+   * @param durationMatrix - Ma trận thời gian di chuyển.
+   * @returns Mảng các điểm dừng đã được sắp xếp tối ưu.
+   */
+  private solveDarpWithGreedy(
+    pointsToVisit: StopPoint[],
+    durationMatrix: number[][],
+  ): StopPoint[] {
+    const numPoints = pointsToVisit.length;
+    const pointsMap = new Map<number, StopPoint>(
+      pointsToVisit.map((p, i) => [i + 1, p]) // index 0 là depot
     );
 
-    try {
-      // Truyền thêm endPoint và depot vào hàm saveRoute
-      await this.saveRoute(optimizedBookings, durationMatrix, depot, endPoint);
-      this.logger.log('Successfully saved new route with endpoint.');
-    } catch (error) {
-      this.logger.error('Failed to save route', error.stack);
+    const passengersOnBoard = new Set<string>();
+    const visitedPointIndices = new Set<number>();
+    const finalRoute: StopPoint[] = [];
+
+    let currentLocationIndex = 0; // Bắt đầu từ depot
+
+    while (finalRoute.length < numPoints) {
+      let nearestNeighborMatrixIndex = -1;
+      let minDuration = Infinity;
+
+      for (let i = 1; i <= numPoints; i++) {
+        if (visitedPointIndices.has(i)) continue;
+        const pointInfo = pointsMap.get(i);
+        if (!pointInfo) continue;
+
+        let isActionValid = false;
+
+        if (pointInfo.type === 'PICKUP') {
+          isActionValid = true;
+        } else if (
+          pointInfo.type === 'DROPOFF' &&
+          passengersOnBoard.has(pointInfo.bookingId)
+        ) {
+          isActionValid = true;
+        }
+
+        if (isActionValid) {
+          const duration = durationMatrix[currentLocationIndex][i];
+          if (duration < minDuration) {
+            minDuration = duration;
+            nearestNeighborMatrixIndex = i;
+          }
+        }
+      }
+
+      if (nearestNeighborMatrixIndex === -1) break;
+
+      const chosenPoint = pointsMap.get(nearestNeighborMatrixIndex);
+      if (!chosenPoint) break;
+
+      finalRoute.push(chosenPoint);
+      visitedPointIndices.add(nearestNeighborMatrixIndex);
+
+      if (chosenPoint.type === 'PICKUP') {
+        passengersOnBoard.add(chosenPoint.bookingId);
+      } else {
+        passengersOnBoard.delete(chosenPoint.bookingId);
+      }
+
+      currentLocationIndex = nearestNeighborMatrixIndex;
     }
+
+    return finalRoute;
   }
 
   /**
