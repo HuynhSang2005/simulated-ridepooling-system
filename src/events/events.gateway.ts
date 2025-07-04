@@ -22,7 +22,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly prisma: PrismaService,
   ) {}
 
-  // Xử lý khi có một client (tài xế) kết nối
+  // Handle khi có một client (tài xế) kết nối
   handleConnection(client: Socket) {
     const driverId = client.handshake.query.driverId as string;
     const userId = client.handshake.query.userId as string;
@@ -61,7 +61,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Tìm driverId từ socketId
     const driverId = [...this.connectionStatus['connectedDrivers'].entries()]
       .find(([_, socketId]) => socketId === client.id)?.[0];
-    if (!driverId) return;
+    if (!driverId) {
+      this.logger.warn(`No driverId found for socket ${client.id}`);
+      return;
+    }
 
     this.logger.log(`Received location update from driver ${driverId}:`, payload);
 
@@ -78,21 +81,30 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       },
     });
 
-    if (!activeRoute) return;
+    if (!activeRoute) {
+      this.logger.warn(`No active route found for driver ${driverId}`);
+      return;
+    }
 
     // 2. Lấy ra danh sách các userId trên lộ trình đó
     const userIds = await this.getUserIdsFromRoute(activeRoute.id);
-
-    if (userIds.length > 0) {
-      const socketIds = this.connectionStatus.getSocketIdsForUsers(userIds);
-      if (socketIds.length > 0) {
-        this.logger.log(`Broadcasting location to sockets: ${socketIds.join(', ')}`);
-        this.server.to(socketIds).emit('driver_location_updated', {
-          driverId,
-          location: payload,
-        });
-      }
+    if (userIds.length === 0) {
+      this.logger.warn(`No userIds found on route ${activeRoute.id} for driver ${driverId}`);
+      return;
     }
+
+    const socketIds = this.connectionStatus.getSocketIdsForUsers(userIds);
+    if (socketIds.length === 0) {
+      this.logger.warn(`No user sockets found for userIds: ${userIds.join(', ')}`);
+      return;
+    }
+
+    this.logger.log(`[Broadcast] Sending location of driver ${driverId} to users: ${userIds.join(', ')}`);
+
+    this.server.to(socketIds).emit('driver_location_updated', {
+      driverId,
+      location: payload,
+    });
   }
 
   private async getUserIdsFromRoute(routeId: string): Promise<string[]> {

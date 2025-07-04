@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Booking, BookingStatus, Driver, Prisma } from '@prisma/client';
+import { Booking, BookingStatus, Driver, DriverStatus, Prisma } from '@prisma/client';
 import { OsrmService, Point } from 'core/osrm/orsm.service';
 import { PrismaService } from 'core/prisma/prisma.service';
 import { EventsGateway } from 'src/events/events.gateway';
@@ -55,7 +55,6 @@ export class RouteOptimizationService {
     }
     this.logger.log(`Found ${validBookings.length} valid pending bookings.`);
 
-    // --- LOGIC MỚI: Thêm điểm cuối chung cho tất cả chuyến đi ---
     const depot: Point = { lat: 10.779722, lng: 106.699444 };
     const endPoint: Point = { lat: 10.8411, lng: 106.8099 }; // Ví dụ: KTX Khu B ĐHQG
 
@@ -103,7 +102,11 @@ export class RouteOptimizationService {
     endPoint: Point,
   ) {
     // Tìm một tài xế có sẵn
-    const driver = await this.prisma.driver.findFirst();
+    const driver = await this.prisma.driver.findFirst({
+      where: {
+        status: DriverStatus.IDLE, // Chỉ lấy tài xế đang rảnh
+      }
+    });
     if (!driver) {
       this.logger.warn('No available drivers found. Cannot create route.');
       return;
