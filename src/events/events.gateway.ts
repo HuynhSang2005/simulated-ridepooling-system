@@ -29,22 +29,38 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     if (driverId) {
       this.connectionStatus.addDriver(driverId, client.id);
-      this.logger.log(`Driver connected: ${driverId}`);
-    } else if (userId) {
-      this.connectionStatus.addUser(userId, client.id);
-      this.logger.log(`User connected: ${userId}`);
-    } else {
-      client.disconnect();
+      this.logger.log(`Driver connected: ${driverId} (socket: ${client.id})`);
+      return; 
     }
+    
+    if (userId) {
+      this.connectionStatus.addUser(userId, client.id);
+      this.logger.log(`User connected: ${userId} (socket: ${client.id})`);
+      return; 
+    }
+    
+    // Chỉ disconnect nếu không có cả driverId và userId
+    this.logger.warn(`Client connected without driverId or userId, disconnecting: ${client.id}`);
+    client.disconnect();
   }
 
   // Xử lý khi client ngắt kết nối
   handleDisconnect(client: Socket) {
+    this.logger.log(`Client disconnected: ${client.id}`);
+    
     const disconnectedDriver = this.connectionStatus.removeDriverBySocketId(client.id);
-    if (disconnectedDriver) this.logger.log(`Driver disconnected: ${disconnectedDriver}`);
+    if (disconnectedDriver) {
+      this.logger.log(`Driver disconnected: ${disconnectedDriver}`);
+      return;
+    }
     
     const disconnectedUser = this.connectionStatus.removeUserBySocketId(client.id);
-    if (disconnectedUser) this.logger.log(`User disconnected: ${disconnectedUser}`);
+    if (disconnectedUser) {
+      this.logger.log(`User disconnected: ${disconnectedUser}`);
+      return;
+    }
+    
+    this.logger.warn(`Unknown client disconnected: ${client.id}`);
   }
 
   // Hàm này sẽ được gọi từ service khác để gửi dữ liệu
@@ -110,15 +126,14 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private async getUserIdsFromRoute(routeId: string): Promise<string[]> {
     const bookings = await this.prisma.booking.findMany({
       where: {
-        stop: {
-          routeId: routeId,
+        stops: { // Đổi từ stop sang stops
+          some: { routeId: routeId },
         },
       },
       select: {
         userId: true,
       },
     });
-    // Dùng Set để loại bỏ các userId trùng lặp (nếu một user đặt nhiều chuyến)
     return [...new Set(bookings.map((b) => b.userId))];
   }
 }

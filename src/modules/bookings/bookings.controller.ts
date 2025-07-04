@@ -14,4 +14,9 @@ export class BookingsController {
   findOne(@Param('id') id: string) {
     return this.bookingsService.findBookingById(id);
   }
+
+  @Get(':id/predictions')
+  async getBookingPredictions(@Param('id') id: string) {
+    return this.bookingsService.getBookingPredictions(id);
+  }
 }

@@ -46,7 +46,7 @@ export class StopsService {
 
           // Cập nhật trạng thái của tất cả các booking trong lộ trình thành COMPLETED
           const bookingsOnRoute = await tx.booking.findMany({
-            where: { stop: { routeId: routeId } },
+            where: { stops: { some: { routeId: routeId } } },
           });
           const bookingIds = bookingsOnRoute.map((b) => b.id);
           await tx.booking.updateMany({

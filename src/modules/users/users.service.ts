@@ -24,7 +24,7 @@ export class UsersService {
         },
       },
       include: {
-        stop: {
+        stops: {
           include: {
             route: {
               include: {
