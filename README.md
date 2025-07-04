@@ -45,7 +45,7 @@ Hệ thống sẽ tự động gom các yêu cầu đang chờ, sử dụng thu�
 -   **Thông báo & Theo dõi Thời gian thực:**
     -   Tài xế nhận được lộ trình mới ngay lập tức qua WebSocket.
     -   Tài xế có thể gửi vị trí của mình, và hệ thống sẽ broadcast cho các khách hàng trên cùng chuyến đi.
--   **Dự đoán Lộ trình:** Hệ thống cung cấp các API để truy vấn thông tin dự đoán về thời gian đón và tổng thời gian di chuyển cho từng booking.
+-   **Dự đoán Lộ trình(Đang suy nghĩ để thêm vào sau):** Hệ thống cung cấp các API để truy vấn thông tin dự đoán về thời gian đón và tổng thời gian di chuyển cho từng booking(Hard code nên chỉ là plain-text).
 
 ---
 
@@ -54,22 +54,15 @@ Hệ thống sẽ tự động gom các yêu cầu đang chờ, sử dụng thu�
 Một giao diện client đơn giản (`test-client.html`) được tạo ra để tương tác và kiểm thử trực quan toàn bộ hệ thống.
 
 <div align="center">
-  <figure>
-    <img src="docs/imgs/admin-panel.jpeg" alt="Admin Panel Screenshot" width="600"/>
-    <figcaption><b>Admin Panel:</b> Create drivers, users, and bookings. Monitor all system data in real time.</figcaption>
-  </figure>
-  <br/>
-  <figure>
-    <img src="docs/imgs/driver-panel.jpeg" alt="Driver Panel Screenshot" width="600"/>
-    <figcaption><b>Driver Panel:</b> Drivers receive optimized routes, view assigned bookings, and update their location live.</figcaption>
-  </figure>
-  <br/>
-  <figure>
-    <img src="docs/imgs/cumstomer-panel.jpeg" alt="Customer Panel Screenshot" width="600"/>
-    <figcaption><b>Customer Panel:</b> Customers track their ride, see driver location, and get trip predictions in real time.</figcaption>
-  </figure>
-</div>
-
+  <img src="docs/imgs/admin-panel.jpeg" alt="Admin Panel Screenshot" width="600"/><br>
+  <b>Bảng điều khiển Quản trị:</b> Tạo tài xế, người dùng, và các booking. Theo dõi toàn bộ dữ liệu hệ thống theo thời gian thực.
+  <br><br>
+  <img src="docs/imgs/driver-panel.jpeg" alt="Driver Panel Screenshot" width="600"/><br>
+  <b>Bảng điều khiển Tài xế:</b> Tài xế nhận lộ trình tối ưu, xem các booking được gán và cập nhật vị trí trực tuyến.
+  <br><br>
+  <img src="docs/imgs/cumstomer-panel.jpeg" alt="Customer Panel Screenshot" width="600"/><br>
+  <b>Bảng điều khiển Khách hàng:</b> Khách hàng theo dõi chuyến đi, xem vị trí tài xế và nhận dự đoán thời gian di chuyển theo thời
+  
 ---
 
 ## 🚀 Cài đặt và Cấu hình
