@@ -26,7 +26,15 @@ export class CreateBookingDto {
   @IsNotEmpty()
   pickupAddress: string;
 
-  @ValidateNested()        // Validate cả object lồng bên trong
-  @Type(() => LocationDto) // Chỉ định cho object lồng
+  @ValidateNested()
+  @Type(() => LocationDto)
   pickupLocation: LocationDto;
+
+  @IsString()
+  @IsNotEmpty()
+  dropoffAddress: string;
+
+  @ValidateNested()
+  @Type(() => LocationDto)
+  dropoffLocation: LocationDto;
 }
