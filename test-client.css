@@ -7,12 +7,26 @@ body {
 }
 
 .container {
-  max-width: 480px;
-  margin: 40px auto;
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 0;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.panel {
   background: #fff;
   border-radius: 18px;
   box-shadow: 0 4px 32px rgba(60, 72, 88, 0.10);
-  padding: 32px 24px 24px 24px;
+  padding: 24px 18px 18px 18px;
+  min-width: 320px;
+  max-width: 360px;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
 }
 
 header {
@@ -21,15 +35,15 @@ header {
 }
 
 header h1 {
-  font-size: 2rem;
-  margin: 0 0 6px 0;
+  font-size: 2.2rem;
   color: #3a5a98;
+  margin: 0 0 6px 0;
   letter-spacing: 1px;
 }
 
-.subtitle {
+header .subtitle {
   color: #6c757d;
-  font-size: 1rem;
+  font-size: 1.1rem;
   margin-bottom: 0;
 }
 
@@ -49,16 +63,19 @@ header h1 {
   color: #3a5a98;
 }
 
-.input-group input {
+input[type="text"] {
   padding: 8px 10px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 1rem;
   outline: none;
+  margin-bottom: 10px;
   transition: border 0.2s;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.input-group input:focus {
+input[type="text"]:focus {
   border-color: #3a5a98;
 }
 
@@ -78,6 +95,7 @@ button {
   cursor: pointer;
   transition: background 0.2s, box-shadow 0.2s;
   box-shadow: 0 2px 8px rgba(60, 72, 88, 0.07);
+  margin-bottom: 8px;
 }
 
 button:disabled {
@@ -89,10 +107,10 @@ button:hover:not(:disabled) {
   background: #22306e;
 }
 
-.logs-section {
+.logs-section, .log-area {
   background: #f4f6fb;
   border-radius: 10px;
-  padding: 16px;
+  padding: 12px;
   min-height: 120px;
   max-height: 220px;
   overflow-y: auto;
@@ -100,12 +118,62 @@ button:hover:not(:disabled) {
   font-size: 0.98rem;
   color: #22223b;
   box-shadow: 0 1px 4px rgba(60, 72, 88, 0.04);
+  margin-top: 12px;
 }
 
-.logs-section h2 {
-  margin-top: 0;
-  font-size: 1.1rem;
+.logs-section h2, .log-area h4 {
+  margin: 0 0 6px 0;
+  font-size: 1rem;
   color: #3a5a98;
+}
+
+pre {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #e0e7ff;
+  margin: 12px 0;
+}
+
+.customer-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.customer-log {
+  margin-top: 94px;
+}
+
+.log-area, .logs-section {
+  min-height: 120px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+@media (max-width: 1100px) {
+  .container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 18px;
+    padding: 16px 0;
+    max-width: 98vw;
+  }
+  .panel {
+    max-width: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
 }
 
 @media (max-width: 600px) {

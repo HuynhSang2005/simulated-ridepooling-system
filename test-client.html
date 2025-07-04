@@ -8,164 +8,287 @@
     <link rel="stylesheet" href="test-client.css" />
   </head>
   <body>
-    <div class="container">
-      <header>
-        <h1>🚗 Ride Pooling Simulator</h1>
-        <p class="subtitle">Test WebSocket features for drivers & users</p>
-      </header>
-      <section class="connect-section">
-        <div class="input-group">
-          <label for="driverId">Driver ID</label>
-          <input type="text" id="driverId" placeholder="Enter Driver ID" autocomplete="off" />
+    <header>
+      <h1 style="margin-top: 30px;">🚗 Ride Pooling Test Client</h1>
+      <p class="subtitle">Realtime WebSocket & API Simulator</p>
+    </header>
+    <div class="container" style="display: flex; gap: 20px;">
+      <!-- PANEL ADMIN -->
+      <div class="panel">
+        <h2>PANEL ADMIN</h2>
+        <input type="text" id="userIdForBooking" placeholder="Dán userId để tạo booking...">
+        <input type="text" id="pickupLat" placeholder="Pickup Lat (vd: 10.77)">
+        <input type="text" id="pickupLng" placeholder="Pickup Lng (vd: 106.69)">
+        <input type="text" id="dropoffLat" placeholder="Dropoff Lat (vd: 10.78)">
+        <input type="text" id="dropoffLng" placeholder="Dropoff Lng (vd: 106.70)">
+        <button onclick="createUser()">Tạo User Mới</button>
+        <button onclick="createDriver()">Tạo Driver Mới</button>
+        <button onclick="createBooking()">Tạo Booking</button>
+        <button onclick="viewBookings()">Xem Danh sách Bookings</button>
+        <button onclick="viewDrivers()">Xem Danh sách Drivers</button>
+        <button onclick="fillSampleCoords()">Điền Tọa độ Mẫu</button>
+        <button onclick="clearLogs()">Xóa Logs</button>
+        <div class="log-area">
+          <h4>Logs Hệ thống:</h4>
+          <pre id="admin-logs">Chưa có log nào được ghi.</pre>
         </div>
-        <div class="input-group">
-          <label for="userId">User ID</label>
-          <input type="text" id="userId" placeholder="Enter User ID" autocomplete="off" />
+      </div>
+      <!-- PANEL DRIVER -->
+      <div class="panel">
+        <h2>PANEL TÀI XẾ</h2>
+        <input type="text" id="driverId" placeholder="Dán driverId vào đây...">
+        <button onclick="connectAsDriver()">Kết nối</button>
+        <button onclick="startSendingLocation()">Bắt đầu gửi Vị trí</button>
+        <button onclick="stopSendingLocation()">Dừng gửi Vị trí</button>
+        <button onclick="disconnectAll()">Ngắt tất cả kết nối</button>
+        <div class="log-area">
+          <h4>Thông tin Lộ trình:</h4>
+          <pre id="route-info">Chưa có lộ trình nào được gán.</pre>
         </div>
-        <div class="button-group">
-          <button id="connectDriverBtn">Connect as Driver</button>
-          <button id="connectUserBtn">Connect as User</button>
-          <button id="disconnectBtn" disabled>Disconnect</button>
+      </div>
+      <!-- PANEL CUSTOMER -->
+      <div class="panel customer-panel">
+        <h2>PANEL KHÁCH HÀNG</h2>
+        <input type="text" id="userId" placeholder="Dán userId vào đây...">
+        <button onclick="connectAsCustomer()">Kết nối</button>
+        <button onclick="viewPredictions()">Xem Dự đoán Chuyến đi</button>
+        <div class="log-area customer-log">
+          <h4>Vị trí Tài xế:</h4>
+          <pre id="driver-location">Đang chờ thông tin...</pre>
         </div>
-      </section>
-      <section class="actions-section" id="driverActions" style="display:none;">
-        <h2>Driver Actions</h2>
-        <div class="input-group">
-          <label for="lat">Latitude</label>
-          <input type="number" id="lat" placeholder="e.g. 10.78" step="any" />
+        <div class="prediction-area">
+          <h4>Thông tin Dự đoán:</h4>
+          <pre id="prediction-info">Chưa có thông tin dự đoán.</pre>
         </div>
-        <div class="input-group">
-          <label for="lng">Longitude</label>
-          <input type="number" id="lng" placeholder="e.g. 106.69" step="any" />
-        </div>
-        <button id="sendLocationBtn">Send Location Update</button>
-      </section>
-      <section class="logs-section">
-        <h2>Logs</h2>
-        <pre id="logs"></pre>
-      </section>
+      </div>
     </div>
     <script>
-      let driverSocket = null;
-      let userSocket = null;
+      const API_BASE_URL = 'http://localhost:3000';
+      let driverSocket, customerSocket, locationInterval;
 
-      const driverIdInput = document.getElementById('driverId');
-      const userIdInput = document.getElementById('userId');
-      const connectDriverBtn = document.getElementById('connectDriverBtn');
-      const connectUserBtn = document.getElementById('connectUserBtn');
-      const disconnectBtn = document.getElementById('disconnectBtn');
-      const sendLocationBtn = document.getElementById('sendLocationBtn');
-      const latInput = document.getElementById('lat');
-      const lngInput = document.getElementById('lng');
-      const logs = document.getElementById('logs');
-      const driverActions = document.getElementById('driverActions');
+      // --- Log Functions ---
+      const adminLogs = document.getElementById('admin-logs');
+      const routeInfo = document.getElementById('route-info');
+      const driverLocation = document.getElementById('driver-location');
+      const predictionInfo = document.getElementById('prediction-info');
+      const logTo = (el, message) => {
+        el.innerHTML = `${new Date().toLocaleTimeString()}: ${message}\n` + el.innerHTML;
+      };
 
-      function log(message, type = 'info') {
-        const time = new Date().toLocaleTimeString();
-        logs.innerHTML += `[${time}] ${message}\n`;
-        logs.scrollTop = logs.scrollHeight;
+      // --- ADMIN FUNCTIONS ---
+      async function createUser() {
+        const name = `User ${Math.floor(Math.random() * 1000)}`;
+        const email = `user${Math.floor(Math.random() * 1000)}@test.com`;
+        const res = await fetch(`${API_BASE_URL}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email })
+        });
+        const data = await res.json();
+        logTo(adminLogs, `Đã tạo User: ${data.name} (ID: ${data.id})`);
       }
 
-      function setUI() {
-        connectDriverBtn.disabled = !!driverSocket;
-        connectUserBtn.disabled = !!userSocket;
-        disconnectBtn.disabled = !(driverSocket || userSocket);
-        driverIdInput.disabled = !!driverSocket;
-        userIdInput.disabled = !!userSocket;
-        driverActions.style.display = driverSocket ? '' : 'none';
+      async function createDriver() {
+        const name = `Driver ${Math.floor(Math.random() * 1000)}`;
+        const res = await fetch(`${API_BASE_URL}/drivers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+        logTo(adminLogs, `Đã tạo Driver: ${data.name} (ID: ${data.id})`);
       }
 
-      connectDriverBtn.onclick = () => {
-        const driverId = driverIdInput.value.trim();
-        if (!driverId) {
-          alert('Please enter a Driver ID');
+      async function createBooking() {
+        const userId = document.getElementById('userIdForBooking').value;
+        const pickupLat = parseFloat(document.getElementById('pickupLat').value);
+        const pickupLng = parseFloat(document.getElementById('pickupLng').value);
+        const dropoffLat = parseFloat(document.getElementById('dropoffLat').value);
+        const dropoffLng = parseFloat(document.getElementById('dropoffLng').value);
+
+        if (!userId || isNaN(pickupLat) || isNaN(pickupLng) || isNaN(dropoffLat) || isNaN(dropoffLng)) {
+          alert('Vui lòng nhập đầy đủ userId và tọa độ!');
           return;
         }
-        if (driverSocket) return;
-        driverSocket = io('http://localhost:3000', { query: { driverId } });
-        setUI();
+
+        const res = await fetch(`${API_BASE_URL}/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            pickupAddress: "123 Random Street",
+            pickupLocation: { lat: pickupLat, lng: pickupLng },
+            dropoffAddress: "456 Destination Ave",
+            dropoffLocation: { lat: dropoffLat, lng: dropoffLng }
+          })
+        });
+        const data = await res.json();
+        logTo(adminLogs, `Booking ${data.id} từ (${pickupLat},${pickupLng}) đến (${dropoffLat},${dropoffLng}) được tạo.`);
+      }
+
+      async function viewBookings() {
+        const res = await fetch(`${API_BASE_URL}/bookings`);
+        const bookings = await res.json();
+        let html = 'DANH SÁCH BOOKINGS:\n';
+        bookings.forEach(booking => {
+          html += `- ID: ${booking.id.slice(-4)} | Status: ${booking.status} | User: ${booking.userId.slice(-4)}\n`;
+        });
+        logTo(adminLogs, html);
+      }
+
+      async function viewDrivers() {
+        const res = await fetch(`${API_BASE_URL}/drivers`);
+        const drivers = await res.json();
+        let html = 'DANH SÁCH DRIVERS:\n';
+        drivers.forEach(driver => {
+          html += `- ID: ${driver.id.slice(-4)} | Name: ${driver.name} | Status: ${driver.status}\n`;
+        });
+        logTo(adminLogs, html);
+      }
+
+      // --- DRIVER FUNCTIONS ---
+      function connectAsDriver() {
+        const driverId = document.getElementById('driverId').value;
+        if (!driverId) { 
+          alert('Vui lòng nhập driverId'); 
+          return; 
+        }
+        
+        if (driverSocket) driverSocket.disconnect();
+
+        driverSocket = io(API_BASE_URL, { 
+          query: { driverId: driverId } 
+        });
+        
+        logTo(routeInfo, `Đang kết nối với tư cách tài xế ${driverId}...`);
 
         driverSocket.on('connect', () => {
-          log(`✅ Connected as driver: ${driverId}`);
-          setUI();
+          logTo(routeInfo, 'Kết nối thành công! Đang chờ lộ trình...');
         });
+        
         driverSocket.on('disconnect', () => {
-          log('🔌 Driver disconnected.');
-          driverSocket = null;
-          setUI();
+          logTo(routeInfo, 'Đã ngắt kết nối.');
         });
-        driverSocket.on('connect_error', (err) => {
-          log(`❌ Driver Connection Error: ${err.message}`);
-          driverSocket = null;
-          setUI();
+        
+        driverSocket.on('new_route', (route) => {
+          logTo(routeInfo, '🎉 CÓ LỘ TRÌNH MỚI! 🎉');
+          displayRoute(route);
         });
-        driverSocket.on('new_route', (data) => {
-          log('🎉 NEW ROUTE ASSIGNED!');
-          log(JSON.stringify(data, null, 2));
-        });
-        driverSocket.on('driver_location_updated', (data) => {
-          log(`🛰️ Driver location updated: ${JSON.stringify(data)}`);
-        });
-      };
+      }
 
-      connectUserBtn.onclick = () => {
-        const userId = userIdInput.value.trim();
-        if (!userId) {
-          alert('Please enter a User ID');
-          return;
+      function displayRoute(route) {
+        let html = `Lộ trình ID: ${route.id}\nTổng thời gian: ${Math.round(route.totalDuration / 60)} phút\n\nĐiểm dừng:\n`;
+        route.stops.forEach(stop => {
+          html += `  - Seq ${stop.sequence}: ${stop.type} ${stop.bookingId ? `(Booking: ...${stop.bookingId.slice(-4)})` : ''}`;
+          // Thêm button cho cả PICKUP và DROPOFF
+          if (stop.type === 'PICKUP' || stop.type === 'DROPOFF') {
+            html += ` <button onclick="completeStop('${stop.id}')">Hoàn thành</button>`;
+          }
+          html += `\n`;
+        });
+        routeInfo.innerHTML = html;
+      }
+
+      async function completeStop(stopId) {
+        await fetch(`${API_BASE_URL}/stops/${stopId}/complete`, { method: 'PATCH' });
+        logTo(routeInfo, `Đã gửi yêu cầu hoàn thành stop ${stopId}`);
+      }
+
+      function startSendingLocation() {
+        if (!driverSocket || !driverSocket.connected) { alert('Tài xế chưa kết nối!'); return; }
+        stopSendingLocation(); // Dừng interval cũ nếu có
+        logTo(routeInfo, 'Bắt đầu gửi vị trí mô phỏng mỗi 5 giây...');
+        locationInterval = setInterval(() => {
+          const location = { lat: 10.75 + Math.random() * 0.1, lng: 106.65 + Math.random() * 0.1 };
+          driverSocket.emit('update_location', location);
+          logTo(routeInfo, `Đã gửi vị trí mới: ${JSON.stringify(location)}`);
+        }, 5000);
+      }
+
+      function stopSendingLocation() {
+        clearInterval(locationInterval);
+        logTo(routeInfo, 'Đã dừng gửi vị trí.');
+      }
+
+      // --- CUSTOMER FUNCTIONS ---
+      function connectAsCustomer() {
+        const userId = document.getElementById('userId').value;
+        if (!userId) { 
+          alert('Vui lòng nhập userId'); 
+          return; 
         }
-        if (userSocket) return;
-        userSocket = io('http://localhost:3000', { query: { userId } });
-        setUI();
+        
+        if (customerSocket) customerSocket.disconnect();
 
-        userSocket.on('connect', () => {
-          log(`✅ Connected as user: ${userId}`);
-          setUI();
+        // Chỉ truyền userId, không truyền driverId
+        customerSocket = io(API_BASE_URL, { 
+          query: { userId: userId } // Không có driverId ở đây
         });
-        userSocket.on('disconnect', () => {
-          log('🔌 User disconnected.');
-          userSocket = null;
-          setUI();
+        
+        customerSocket.on('connect', () => logTo(driverLocation, `Kết nối thành công với tài xế qua userId ${userId}`));
+        customerSocket.on('disconnect', () => logTo(driverLocation, 'Đã ngắt kết nối.'));
+        customerSocket.on('driver_location_updated', (location) => {
+          logTo(driverLocation, `📍 Vị trí tài xế: ${JSON.stringify(location)}`);
         });
-        userSocket.on('connect_error', (err) => {
-          log(`❌ User Connection Error: ${err.message}`);
-          userSocket = null;
-          setUI();
-        });
-        userSocket.on('new_route', (data) => {
-          log('🎉 NEW ROUTE ASSIGNED!');
-          log(JSON.stringify(data, null, 2));
-        });
-        userSocket.on('driver_location_updated', (data) => {
-          log(`🛰️ Driver location updated: ${JSON.stringify(data)}`);
-        });
-      };
+      }
 
-      disconnectBtn.onclick = () => {
+      function clearLogs() {
+        adminLogs.innerHTML = 'Logs đã được xóa.';
+        routeInfo.innerHTML = 'Chưa có lộ trình nào được gán.';
+        driverLocation.innerHTML = 'Đang chờ thông tin...';
+        predictionInfo.innerHTML = 'Chưa có thông tin dự đoán.';
+      }
+
+      function disconnectAll() {
         if (driverSocket) {
           driverSocket.disconnect();
-          driverSocket = null;
+          logTo(routeInfo, 'Driver đã ngắt kết nối.');
         }
-        if (userSocket) {
-          userSocket.disconnect();
-          userSocket = null;
+        if (customerSocket) {
+          customerSocket.disconnect();
+          logTo(driverLocation, 'Customer đã ngắt kết nối.');
         }
-        setUI();
-      };
+        stopSendingLocation();
+      }
 
-      sendLocationBtn.onclick = () => {
-        if (!driverSocket) return;
-        const lat = parseFloat(latInput.value);
-        const lng = parseFloat(lngInput.value);
-        if (isNaN(lat) || isNaN(lng)) {
-          alert('Please enter valid latitude and longitude');
+      function fillSampleCoords() {
+        document.getElementById('pickupLat').value = '10.7769';
+        document.getElementById('pickupLng').value = '106.7009';
+        document.getElementById('dropoffLat').value = '10.7829';
+        document.getElementById('dropoffLng').value = '106.6958';
+        logTo(adminLogs, 'Đã điền tọa độ mẫu TP.HCM (Quận 1 → Quận 3)');
+      }
+
+      async function viewPredictions() {
+        const userId = document.getElementById('userId').value;
+        if (!userId) {
+          alert('Vui lòng nhập userId');
           return;
         }
-        driverSocket.emit('update_location', { lat, lng });
-        log(`📍 Sent location: (${lat}, ${lng})`);
-      };
 
-      setUI();
+        try {
+          // Lấy active booking của user
+          const userRes = await fetch(`${API_BASE_URL}/users/${userId}/active-booking`);
+          const activeBooking = await userRes.json();
+          
+          // Lấy predictions cho booking đó
+          const predRes = await fetch(`${API_BASE_URL}/bookings/${activeBooking.id}/predictions`);
+          const predictions = await predRes.json();
+          
+          let html = `THÔNG TIN DỰ ĐOÁN:\n`;
+          html += `📍 Từ: ${activeBooking.pickupAddress}\n`;
+          html += `🎯 Đến: ${activeBooking.dropoffAddress}\n`;
+          html += `⏰ Tài xế đến đón: ${predictions.estimatedPickupTime}\n`;
+          html += `🕐 Thời gian di chuyển: ${predictions.estimatedTripDuration}\n`;
+          html += `👨‍✈️ Tài xế: ${predictions.driver?.name || 'Chưa gán'}\n`;
+          html += `📊 Trạng thái: ${predictions.status}\n`;
+          
+          document.getElementById('prediction-info').innerHTML = html;
+          
+        } catch (error) {
+          logTo(driverLocation, `Lỗi: ${error.message}`);
+        }
+      }
     </script>
   </body>
 </html>
