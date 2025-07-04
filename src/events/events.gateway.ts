@@ -8,6 +8,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { DriverStatusService } from './driver-status.service';
 import { Logger } from '@nestjs/common';
+import { PrismaService } from 'core/prisma/prisma.service';
 
 @WebSocketGateway({ cors: { origin: '*' } }) // Cho phép kết nối từ mọi nguồn
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -16,7 +17,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger(EventsGateway.name);
 
-  constructor(private readonly driverStatusService: DriverStatusService) {}
+  constructor(
+    private readonly driverStatusService: DriverStatusService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   // Xử lý khi có một client (tài xế) kết nối
   handleConnection(client: Socket) {
@@ -50,15 +54,50 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
   
   @SubscribeMessage('update_location')
-  handleUpdateLocation(client: Socket, payload: { lat: number; lng: number }): void {
+  async handleUpdateLocation(client: Socket, payload: { lat: number; lng: number }): Promise<void> {
     const driverId = this.driverStatusService.getDriverId(client.id);
-    if (driverId) {
-      this.logger.log(
-        `Received location update from driver ${driverId}:`,
-        payload,
-      );
-      // Logic tiếp theo: Gửi vị trí này đến các khách hàng liên quan
-      // Sẽ được implement trong các task sau.
+    if (!driverId) return;
+
+    this.logger.log(`Received location update from driver ${driverId}:`, payload);
+
+    // --- LOGIC MỚI ---
+    // 1. Tìm lộ trình đang hoạt động của tài xế (lộ trình mới nhất)
+    const activeRoute = await this.prisma.route.findFirst({
+      where: { driverId: driverId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        stops: {
+          where: {
+            bookingId: { not: null },
+          },
+        },
+      },
+    });
+
+    if (!activeRoute) return;
+
+    // 2. Lấy ra danh sách các userId trên lộ trình đó
+    const userIds = await this.getUserIdsFromRoute(activeRoute.id);
+
+    if (userIds.length > 0) {
+      this.logger.log(`[Broadcast] Sending location of driver ${driverId} to users: ${userIds.join(', ')}`);
+      // Logic gửi WebSocket đến các user sẽ được thêm ở bước sau
     }
+  }
+
+  // --- THÊM HÀM HELPER ---
+  private async getUserIdsFromRoute(routeId: string): Promise<string[]> {
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        stop: {
+          routeId: routeId,
+        },
+      },
+      select: {
+        userId: true,
+      },
+    });
+    // Dùng Set để loại bỏ các userId trùng lặp (nếu một user đặt nhiều chuyến)
+    return [...new Set(bookings.map((b) => b.userId))];
   }
 }
