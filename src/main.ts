@@ -11,11 +11,17 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-   app.useGlobalPipes(new ValidationPipe({
+  app.useGlobalPipes(new ValidationPipe({
     whitelist: true, 
     transform: true, 
   }));
 
-  await app.listen(process.env.PORT ?? 3000);
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port);
+
+  // Log client-test.html URL
+  console.log('\x1b[36m%s\x1b[0m', `🚀 API server running at: http://localhost:${port}`);
+  console.log('\x1b[33m%s\x1b[0m', `🧪 Open your client: file://${process.cwd()}/test-client.html`);
+  console.log('\x1b[33m%s\x1b[0m', `Or use Live Server: http://127.0.0.1:5500/test-client.html`);
 }
 bootstrap();
