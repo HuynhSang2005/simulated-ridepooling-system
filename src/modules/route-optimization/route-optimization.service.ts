@@ -55,23 +55,16 @@ export class RouteOptimizationService {
     }
     this.logger.log(`Found ${validBookings.length} valid pending bookings.`);
 
-    // 3. Tìm một tài xế có sẵn
-    const driver = await this.prisma.driver.findFirst(); // Logic tìm tài xế có thể phức tạp hơn
-    if (!driver) {
-      this.logger.warn('No available drivers found. Cannot create route.');
-      return;
-    }
+    // --- LOGIC MỚI: Thêm điểm cuối chung cho tất cả chuyến đi ---
+    const depot: Point = { lat: 10.779722, lng: 106.699444 };
+    const endPoint: Point = { lat: 10.8411, lng: 106.8099 }; // Ví dụ: KTX Khu B ĐHQG
 
-    // 4. Chuẩn bị dữ liệu cho việc tính toán
-    // Mảng `locations` sẽ có cấu trúc: [depot, booking1_location, booking2_location, ...]
-    const locations: Point[] = [this.DEPOT_LOCATION];
-    const locationIndexMap = new Map<string, number>(); // Map từ bookingId -> index trong `locations`
-
-    validBookings.forEach((booking, index) => {
-      locations.push(booking.pickupLocation as unknown as Point);
-      // Index trong `locations` sẽ là `index + 1` (vì index 0 là depot)
-      locationIndexMap.set(booking.id, index + 1);
-    });
+    // Chuẩn bị danh sách các điểm, bao gồm cả điểm cuối
+    const locations: Point[] = [
+      depot,
+      ...validBookings.map((booking) => booking.pickupLocation as unknown as Point),
+      endPoint,
+    ];
 
     // 5. Lấy ma trận thời gian từ OSRM
     const durationMatrix = await this.osrmService.getDurationMatrix(locations);
@@ -83,41 +76,46 @@ export class RouteOptimizationService {
     );
 
     try {
-      // 7. Lưu lộ trình đã tối ưu vào database
-      await this.saveRouteAndNotifyDriver(
+      // Truyền thêm endPoint và depot vào hàm saveRoute
+      await this.saveRoute(
         optimizedBookings,
         durationMatrix,
-        locationIndexMap,
-        driver,
+        depot,
+        endPoint,
       );
-      this.logger.log('Successfully saved new route to the database.');
+      this.logger.log('Successfully saved new route with endpoint.');
     } catch (error) {
       this.logger.error('Failed to save route', error.stack);
     }
   }
 
   /**
-   * Lưu lộ trình đã được tối ưu vào database trong một transaction duy nhất.
+   * Lưu lộ trình đã được tối ưu vào database trong một transaction duy nhất, có thêm điểm cuối ENDPOINT.
    * @param optimizedBookings - Mảng các booking theo thứ tự đón tối ưu.
    * @param durationMatrix - Ma trận thời gian từ OSRM.
-   * @param locationIndexMap - Map từ bookingId đến index của nó trong ma trận.
-   * @param driver - Tài xế được gán cho lộ trình này.
+   * @param depot - Điểm xuất phát (Depot).
+   * @param endPoint - Điểm cuối chung cho tất cả chuyến đi.
    */
-  private async saveRouteAndNotifyDriver(
+  private async saveRoute(
     optimizedBookings: Booking[],
     durationMatrix: number[][],
-    locationIndexMap: Map<string, number>,
-    driver: Driver,
+    depot: Point,
+    endPoint: Point,
   ) {
-    // Sử dụng transaction để đảm bảo tất cả các thao tác đều thành công hoặc không có gì cả.
-    // Transaction này sẽ trả về thông tin lộ trình đầy đủ nếu thành công.
-    const newRoute = await this.prisma.$transaction(async (tx) => {
+    // Tìm một tài xế có sẵn
+    const driver = await this.prisma.driver.findFirst();
+    if (!driver) {
+      this.logger.warn('No available drivers found. Cannot create route.');
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
       // Tạo record Route mới để lấy ID
-      const createdRoute = await tx.route.create({
+      const newRoute = await tx.route.create({
         data: {
           driverId: driver.id,
-          totalDistance: 0, 
-          totalDuration: 0, 
+          totalDistance: 0,
+          totalDuration: 0,
         },
       });
 
@@ -128,40 +126,44 @@ export class RouteOptimizationService {
 
       // Thêm điểm dừng đầu tiên: Depot
       stopsToCreate.push({
-        routeId: createdRoute.id,
+        routeId: newRoute.id,
         type: 'DEPOT',
-        location: this.DEPOT_LOCATION as unknown as Prisma.JsonObject,
+        location: depot as unknown as Prisma.JsonObject,
         sequence: 1,
-        eta: new Date(), // ETA tại depot là thời gian hiện tại
+        eta: new Date(),
       });
 
       // Thêm các điểm dừng đón khách (PICKUP) theo thứ tự đã tối ưu
       for (const [index, booking] of optimizedBookings.entries()) {
-        // Lấy index của booking trong ma trận gốc để tra cứu thời gian di chuyển
-        const currentLocationIndex = locationIndexMap.get(booking.id)!;
-
-        // Thời gian di chuyển từ điểm trước đó đến điểm hiện tại
-        const travelDuration =
-          durationMatrix[lastLocationIndex][currentLocationIndex];
+        const currentLocationIndex = index + 1; // index 0 là depot, các booking bắt đầu từ 1
+        const travelDuration = durationMatrix[lastLocationIndex][currentLocationIndex];
         cumulativeDuration += travelDuration;
 
         stopsToCreate.push({
-          routeId: createdRoute.id,
+          routeId: newRoute.id,
           bookingId: booking.id,
           type: 'PICKUP',
           location: booking.pickupLocation as unknown as Prisma.JsonObject,
-          sequence: index + 2, // Sequence: Depot (1), Pickup 1 (2), Pickup 2 (3), ...
-          // ETA = thời gian hiện tại + tổng thời gian di chuyển tích lũy (tính bằng giây)
+          sequence: index + 2, // Depot (1), Pickup 1 (2), ...
           eta: new Date(Date.now() + cumulativeDuration * 1000),
         });
 
-        // Cập nhật index của điểm dừng trước đó cho vòng lặp tiếp theo
         lastLocationIndex = currentLocationIndex;
       }
 
-      await tx.stop.createMany({
-        data: stopsToCreate,
+      // --- LOGIC MỚI: Thêm điểm dừng cuối cùng là ENDPOINT ---
+      const endPointLocationIndex = durationMatrix.length - 1;
+      cumulativeDuration += durationMatrix[lastLocationIndex][endPointLocationIndex];
+      stopsToCreate.push({
+        routeId: newRoute.id,
+        bookingId: null,
+        type: 'ENDPOINT',
+        location: endPoint as unknown as Prisma.JsonObject,
+        sequence: stopsToCreate.length + 1,
+        eta: new Date(Date.now() + cumulativeDuration * 1000),
       });
+
+      await tx.stop.createMany({ data: stopsToCreate });
 
       // Cập nhật trạng thái các booking đã được gán vào lộ trình
       const bookingIds = optimizedBookings.map((b) => b.id);
@@ -170,34 +172,14 @@ export class RouteOptimizationService {
         data: { status: BookingStatus.ASSIGNED },
       });
 
-      //
-      // totalDuration là tổng thời gian từ depot đến điểm đón khách cuối cùng.
+      // Cập nhật tổng thời gian cho route
       await tx.route.update({
-        where: { id: createdRoute.id },
+        where: { id: newRoute.id },
         data: {
           totalDuration: cumulativeDuration,
-          // totalDistance có thể được cập nhật tương tự nếu OSRM trả về ma trận khoảng cách
-        },
-      });
-
-      // Lấy lại thông tin route đầy đủ để trả về từ transaction
-      // Việc này đảm bảo dữ liệu gửi đi là mới nhất và bao gồm cả các stops.
-      return tx.route.findUnique({
-        where: { id: createdRoute.id },
-        include: {
-          stops: {
-            orderBy: {
-              sequence: 'asc',
-            },
-          },
         },
       });
     });
-
-    // Sau khi transaction thành công, gửi thông báo real-time cho tài xế
-    if (newRoute) {
-      this.eventsGateway.sendNewRouteToDriver(driver.id, newRoute);
-    }
   }
 
   /**
