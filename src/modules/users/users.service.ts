@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PrismaService } from 'core/prisma/prisma.service';
+import { BookingStatus } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -13,4 +14,38 @@ export class UsersService {
   findAll() {
     return this.prisma.user.findMany();
   }
+
+  async getActiveBooking(userId: string) {
+    const activeBooking = await this.prisma.booking.findFirst({
+      where: {
+        userId: userId,
+        status: {
+          in: [BookingStatus.ASSIGNED, BookingStatus.IN_PROGRESS],
+        },
+      },
+      include: {
+        stop: {
+          include: {
+            route: {
+              include: {
+                driver: true, // Lấy thông tin tài xế
+                stops: {    // Lấy tất cả các điểm dừng của lộ trình
+                  orderBy: {
+                    sequence: 'asc',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!activeBooking) {
+      throw new NotFoundException(`No active booking found for user ${userId}`);
+    }
+
+    return activeBooking;
+  }
+
 }
