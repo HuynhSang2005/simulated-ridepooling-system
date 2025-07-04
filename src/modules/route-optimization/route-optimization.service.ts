@@ -117,7 +117,6 @@ export class RouteOptimizationService {
       this.logger.log(`- ${stop.type} for booking ...${stop.bookingId.slice(-4)}`);
     });
 
-    // BỔ SUNG: Lưu route và tính ETA
     await this.saveRouteWithPredictions(optimizedStops, durationMatrix, depot);
   }
 
